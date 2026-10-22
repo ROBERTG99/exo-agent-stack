@@ -448,22 +448,26 @@ This build uses several Claude models, each where it pays off. The main session 
 | `test-designer`, `ux-reviewer` | `sonnet` | `medium` | Missing test cases, property tests, UI and accessibility review. |
 | `docs-editor` | `haiku` | `medium` | Keeping README and docs consistent with code and reports. |
 | `reviewer`, `security-auditor`, `eval-analyst` and every project-specific reviewer | `opus` | `high` | Milestone reviews, threat model, clustering eval failures. |
-| `architect` (create `.claude/agents/architect.md`, read-only tools plus Write for ADRs) | `fable` | `high` | Only the critical decisions listed below. |
+| `architect` (create `.claude/agents/architect.md`, read-only tools plus Write for ADRs) | `opus` | `xhigh`; `max` for the M0 review and the critical-item reviews | Architecture reviews, hard diagnoses and the critical decisions listed below. This is the default "deep thinker"; it replaces Fable for everything except the case below. |
+| `architect-critical` (create `.claude/agents/architect-critical.md`, read-only tools plus Write for ADRs) | `fable` | `high` | Only the critical items listed below, and only after `architect` at `max` has failed to settle them. Never used for routine reviews. |
 
 **Escalation ladder.**
 1. If the same check still fails after two fix attempts in the main session, delegate diagnosis and fix to a fresh `opus` subagent at effort `high`. Give it the failing command, its output and the relevant files.
-2. If two `opus` attempts also fail, and the task is on the critical list or blocks a milestone, make one `architect` call with a root-cause brief.
-3. After the `architect` call, either fix the problem or record it in `docs/KNOWN_LIMITATIONS.md` or under §20. Never loop on the same failure.
+2. If two `opus` attempts also fail, and the task is on the critical list or blocks a milestone, make one `architect` call (`opus`, `xhigh`) with a root-cause brief.
+3. If `architect` also fails and the item is on the critical list below, retry once with `architect` at effort `max`. Only if that fails too, make one `architect-critical` (Fable) call.
+4. After the last call, either fix the problem or record it in `docs/KNOWN_LIMITATIONS.md` or under §20. Never loop on the same failure.
 
-**Fable rules.**
-- Budget: at most `BUILD_FABLE_BUDGET=6` Fable invocations per build, allocated as follows:
-  1. One M0 architecture review of §3 and §4 before any feature code. It returns risks and proposed changes, which go into `docs/DECISIONS.md` and, when architectural, an ADR.
-  2. Up to three reviews of the critical items below, each when its first implementation is complete.
-  3. One M9 review of the whole diff before §19.
-  4. At most one escalation from the ladder.
+**Architect rules (Opus).** `architect` calls are allocated as follows, at most 10 per build:
+1. One M0 architecture review of §3 and §4 before any feature code, at effort `max`. It returns risks and proposed changes, which go into `docs/DECISIONS.md` and, when architectural, an ADR.
+2. Up to three reviews of the critical items below, at effort `max`, each when its first implementation is complete.
+3. One M9 review of the whole diff before §19, at effort `xhigh`.
+4. Escalations from the ladder, at effort `xhigh`.
+
+**Fable rules (critical only).**
+- Budget: at most `BUILD_FABLE_BUDGET=2` Fable invocations per build. They are reserved for the last step of the escalation ladder on a critical item, or for a critical item whose `architect` review at `max` returned an unresolved blocker. Fable is never used for the M0 review, the M9 review or routine reviews.
 - How to brief it: describe the outcome rather than the steps, and hand it whole problems.
 - Billing: Fable may bill to usage credits, and in non-interactive mode it does so without asking. That is why the budget is a hard cap.
-- Fallback: if Fable is unavailable, is refused, or the budget is spent, use `opus` at effort `xhigh` and record the substitution.
+- Fallback: if Fable is unavailable, is refused, or the budget is spent, use `architect` at effort `max` and record the substitution.
 - Safety fallback: Fable's safety classifiers can automatically re-route flagged requests to Opus, most often for security-related content. This is expected; record it and continue.
 
 **Model usage log.** `PROGRESS.md` gets a "Model usage" table with these columns: date, task, role, model, effort, reason, outcome. Every `opus` and `fable` delegation is logged there. Add this item to the Global Definition of Done checklist in `PROGRESS.md`: "Model usage log complete, and Fable invocations ≤ `BUILD_FABLE_BUDGET`."
