@@ -442,7 +442,7 @@ This build uses several Claude models, each where it pays off. The main session 
 
 | Role | Model alias | Effort | Used for |
 |---|---|---|---|
-| Orchestrator (main session) | `sonnet` | `medium` | All routine test-first tasks from M0 to M8: scaffolding, code, tests, Docker, CI and docs. Merge `"model": "sonnet"` and `"effortLevel": "medium"` into `.claude/settings.json`, keeping the `attribution` key. The maintainer launches with `claude --model sonnet`. |
+| Orchestrator (main session) | `sonnet` | `high` | All routine test-first tasks from M0 to M8: scaffolding, code, tests, Docker, CI and docs. Merge `"model": "sonnet"` and `"effortLevel": "high"` into `.claude/settings.json`, keeping the `attribution` key. The maintainer launches with `claude --model sonnet --effort high`. |
 | `mechanic` subagent (create it in `.claude/agents/mechanic.md`) | `haiku` | `low` | Mechanical edits with a clear spec: formatting and lint fixes, renames, dependency bumps, changelog entries, regenerating OpenAPI specs and TypeScript types. |
 | `Explore` override (create `.claude/agents/Explore.md`, read-only tools) | `haiku` | `low` | Codebase search and file discovery. It overrides the built-in Explore subagent. |
 | `test-designer`, `ux-reviewer` | `sonnet` | `medium` | Missing test cases, property tests, UI and accessibility review. |
