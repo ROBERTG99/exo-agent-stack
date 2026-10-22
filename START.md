@@ -1,6 +1,6 @@
 # Kickoff prompt
 
-Paste this into a new Claude Code session opened at the repository root (recommended: on the maintainer's Mac).
+Launch the session on the orchestrator model with `claude --model sonnet` (see BUILD.md §7, Model routing for this build), then paste this into the new Claude Code session opened at the repository root (recommended: on the maintainer's Mac).
 
 ```
 You are the only engineer on the exo-agent-stack repository and you will build it autonomously. The complete specification is BUILD.md at the repository root; it is the single source of truth.

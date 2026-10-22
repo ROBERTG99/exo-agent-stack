@@ -436,6 +436,45 @@ Versions: latest stable, locked. Appendix B governs the fake model contracts and
 - **Repository**: workflows (§17); Dependabot (`npm`, `pip`, `docker`, `github-actions`, `gitsubmodule` labelled `exo-pin`); pre-commit; issue and PR templates; `CODEOWNERS` (`* @ROBERTG99`); `.devcontainer/devcontainer.json`; optional `claude-review.yml` (`anthropics/claude-code-action`) running only if the repository secret `ANTHROPIC_API_KEY` exists, a maintainer GitHub setting outside the stack (documented by `D-20`).
 - **Product**: Slack via Exo's adapter (signed webhook fixture test); MCP servers for `researcher` (tests use `tests/fixtures/mcp-stub/`).
 
+### Model routing for this build
+
+This build uses several Claude models, each where it pays off. The main session is the orchestrator and cannot switch its own model, so routing works in two ways: the session is launched on the orchestrator model, and work is delegated to subagents with an explicit model, set either in the subagent's frontmatter or with the Agent tool's per-invocation `model` parameter, which takes precedence over the frontmatter. This table overrides any model named elsewhere in §7.
+
+| Role | Model alias | Effort | Used for |
+|---|---|---|---|
+| Orchestrator (main session) | `sonnet` | `medium` | All routine test-first tasks from M0 to M8: scaffolding, code, tests, Docker, CI and docs. Merge `"model": "sonnet"` and `"effortLevel": "medium"` into `.claude/settings.json`, keeping the `attribution` key. The maintainer launches with `claude --model sonnet`. |
+| `mechanic` subagent (create it in `.claude/agents/mechanic.md`) | `haiku` | `low` | Mechanical edits with a clear spec: formatting and lint fixes, renames, dependency bumps, changelog entries, regenerating OpenAPI specs and TypeScript types. |
+| `Explore` override (create `.claude/agents/Explore.md`, read-only tools) | `haiku` | `low` | Codebase search and file discovery. It overrides the built-in Explore subagent. |
+| `test-designer`, `ux-reviewer` | `sonnet` | `medium` | Missing test cases, property tests, UI and accessibility review. |
+| `docs-editor` | `haiku` | `medium` | Keeping README and docs consistent with code and reports. |
+| `reviewer`, `security-auditor`, `eval-analyst` and every project-specific reviewer | `opus` | `high` | Milestone reviews, threat model, clustering eval failures. |
+| `architect` (create `.claude/agents/architect.md`, read-only tools plus Write for ADRs) | `fable` | `high` | Only the critical decisions listed below. |
+
+**Escalation ladder.**
+1. If the same check still fails after two fix attempts in the main session, delegate diagnosis and fix to a fresh `opus` subagent at effort `high`. Give it the failing command, its output and the relevant files.
+2. If two `opus` attempts also fail, and the task is on the critical list or blocks a milestone, make one `architect` call with a root-cause brief.
+3. After the `architect` call, either fix the problem or record it in `docs/KNOWN_LIMITATIONS.md` or under §20. Never loop on the same failure.
+
+**Fable rules.**
+- Budget: at most `BUILD_FABLE_BUDGET=6` Fable invocations per build, allocated as follows:
+  1. One M0 architecture review of §3 and §4 before any feature code. It returns risks and proposed changes, which go into `docs/DECISIONS.md` and, when architectural, an ADR.
+  2. Up to three reviews of the critical items below, each when its first implementation is complete.
+  3. One M9 review of the whole diff before §19.
+  4. At most one escalation from the ladder.
+- How to brief it: describe the outcome rather than the steps, and hand it whole problems.
+- Billing: Fable may bill to usage credits, and in non-interactive mode it does so without asking. That is why the budget is a hard cap.
+- Fallback: if Fable is unavailable, is refused, or the budget is spent, use `opus` at effort `xhigh` and record the substitution.
+- Safety fallback: Fable's safety classifiers can automatically re-route flagged requests to Opus, most often for security-related content. This is expected; record it and continue.
+
+**Model usage log.** `PROGRESS.md` gets a "Model usage" table with these columns: date, task, role, model, effort, reason, outcome. Every `opus` and `fable` delegation is logged there. Add this item to the Global Definition of Done checklist in `PROGRESS.md`: "Model usage log complete, and Fable invocations ≤ `BUILD_FABLE_BUDGET`."
+
+The models used by the product itself at runtime are a separate concern, governed by Appendix B.
+
+**Critical items for this repository (eligible for `architect`):**
+- subscription-only policy enforcement (doctor checks, Mode A and Mode B boundaries)
+- Mode B credential mapping: wrapper versus patch
+- bridge approval flow and credit-guard semantics
+
 ## 8. Work plan
 
 Walking skeleton first, then depth; tests are Vitest unless named.
