@@ -367,3 +367,76 @@ describe("GET /api/v1/threads/resolve", () => {
     expect((await fetch(`${s.url}/api/v1/threads/resolve?thread=x`)).status).toBe(401);
   });
 });
+
+// A reply can be lost after Exo has accepted a turn (timeout, reset, a crash of stackd before the
+// step is saved). A retry with the same key must find that turn, not start a second one (§4.9).
+describe("a turn whose reply was lost", () => {
+  /** A fetch that, once armed, sends the next turn request to Exo and then drops the answer. */
+  const lossyFetch = () => {
+    let armed = false;
+    const lossy: typeof fetch = async (input, init) => {
+      const res = await fetch(input, init);
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (armed && init?.method === "POST" && url.endsWith("/turn")) {
+        armed = false;
+        await res.text();
+        throw new TypeError("fetch failed");
+      }
+      return res;
+    };
+    return { fetchImpl: lossy, arm: () => void (armed = true) };
+  };
+  const turnCount = (s: Stack) =>
+    (s.sim.store.db.prepare("SELECT COUNT(*) AS n FROM turns").get() as { n: number }).n;
+  const idle = (s: Stack, slug: string) =>
+    until(async () => {
+      const r = await s.call("GET", `/api/v1/threads/repo-builder/${slug}`);
+      return r.body.state === "idle" ? r : undefined;
+    }, "an idle thread");
+
+  it("does not start a second first turn, even when the lost one has already finished", async () => {
+    const fault = lossyFetch();
+    const s = await stack({ stackd: { fetchImpl: fault.fetchImpl } });
+    fault.arm();
+    const first = await s.call("POST", "/api/v1/threads", start());
+    expect(first.status).toBe(503);
+    await idle(s, slugOf(KEY));
+    const retry = await s.call("POST", "/api/v1/threads", start());
+    expect(retry.status).toBe(201);
+    expect(turnCount(s)).toBe(1);
+    const only = s.sim.store.db.prepare("SELECT id FROM turns").get() as { id: string };
+    expect(retry.body.turn_id).toBe(only.id);
+    const again = await s.call("POST", "/api/v1/threads", start());
+    expect(again.body).toMatchObject({ turn_id: only.id, replayed: true });
+  });
+
+  it("does not send a message twice when the reply to the first send was lost", async () => {
+    const fault = lossyFetch();
+    const s = await stack({ stackd: { fetchImpl: fault.fetchImpl } });
+    const started = await s.call("POST", "/api/v1/threads", start());
+    await idle(s, started.body.thread_slug);
+    const path = `/api/v1/threads/repo-builder/${started.body.thread_slug}/turns`;
+    const send = { message: "[[scenario:plain]] more", idempotency_key: "key-0000-send-0002" };
+    fault.arm();
+    expect((await s.call("POST", path, send)).status).toBe(503);
+    await idle(s, started.body.thread_slug);
+    const retry = await s.call("POST", path, send);
+    expect(retry.status).toBe(201);
+    expect(turnCount(s)).toBe(2);
+    const replay = await s.call("POST", path, send);
+    expect(replay.body).toMatchObject({ turn_id: retry.body.turn_id, replayed: true });
+  });
+
+  it("still sends once when the first request never reached Exo", async () => {
+    const s = await stack();
+    const started = await s.call("POST", "/api/v1/threads", start());
+    await idle(s, started.body.thread_slug);
+    const path = `/api/v1/threads/repo-builder/${started.body.thread_slug}/turns`;
+    const send = { message: "[[scenario:plain]] more", idempotency_key: "key-0000-send-0003" };
+    await s.stopExo();
+    expect((await s.call("POST", path, send)).status).toBe(503);
+    await s.restartExo();
+    expect((await s.call("POST", path, send)).status).toBe(201);
+    expect(turnCount(s)).toBe(2);
+  });
+});

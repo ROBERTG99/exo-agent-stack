@@ -61,8 +61,8 @@ const bannerField = (state: "ok" | "warn" | "stop"): { banner?: string } => {
   return banner ? { banner } : {};
 };
 
-/** The turn started by a request that crashed before it could be recorded, found in the event log. */
-async function adoptActiveTurn(
+/** The newest turn of a thread, from its event log. */
+async function newestTurn(
   exo: ExoClient,
   agentId: string,
   threadId: string,
@@ -73,27 +73,57 @@ async function adoptActiveTurn(
     limit: 1,
   });
   const turnId = (started as Record<string, unknown> | undefined)?.turn_id;
-  if (typeof turnId !== "string" || !(await exo.getTurn(agentId, threadId, turnId)).active)
-    return undefined;
+  if (typeof turnId !== "string") return undefined;
   const session = (started as Record<string, unknown>).session_id;
   return { turn_id: turnId, session_id: typeof session === "string" ? session : "" };
 }
 
-/** Submits a turn, adopting the one already running if this is a retry of a half-done request. */
+/** The turn that is running now, if a request that crashed before it could be recorded started it. */
+async function adoptActiveTurn(
+  exo: ExoClient,
+  agentId: string,
+  threadId: string,
+): Promise<{ turn_id: string; session_id: string } | undefined> {
+  const newest = await newestTurn(exo, agentId, threadId);
+  return newest && (await exo.getTurn(agentId, threadId, newest.turn_id)).active
+    ? newest
+    : undefined;
+}
+
+/**
+ * Submits a turn once per idempotency key. Exo can accept a turn and the answer be lost (a timeout, a
+ * reset, a crash of stackd before the step is saved), so before the request goes out the newest turn
+ * of the thread is saved as `submit_after`. A retry that finds a newer turn there adopts it, finished
+ * or not, instead of starting a second one. (It assumes nothing else starts turns on this thread
+ * between the two attempts; stackd is the only Exo writer, and a second turn answers 409 while one runs.)
+ */
 async function submitTurn(
   ctx: AppContext,
   agent: AgentInfo,
   thread: { id: string; slug: string },
   input: string,
   adopt: boolean,
+  progress: Json,
+  save: (more: Json) => void,
 ): Promise<{ turn_id: string; session_id: string }> {
-  await ctx.supervisor.assertCapacity();
   const tracked = {
     agentId: agent.id,
     threadId: thread.id,
     threadSlug: thread.slug,
     pool: poolOf(agent),
   };
+  if (progress.submit_after !== undefined) {
+    const newest = await newestTurn(ctx.exo, agent.id, thread.id);
+    if (newest && newest.turn_id !== progress.submit_after) {
+      if ((await ctx.exo.getTurn(agent.id, thread.id, newest.turn_id)).active)
+        ctx.supervisor.track(newest.turn_id, tracked);
+      return newest;
+    }
+    await ctx.supervisor.assertCapacity();
+  } else {
+    await ctx.supervisor.assertCapacity();
+    save({ submit_after: (await newestTurn(ctx.exo, agent.id, thread.id))?.turn_id ?? "" });
+  }
   try {
     const res = await ctx.exo.submitTurn(agent.id, thread.id, {
       input,
@@ -181,7 +211,15 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
         let turnId = progress.turn_id as string | undefined;
         let sessionId = progress.session_id as string | undefined;
         if (!turnId) {
-          const turn = await submitTurn(ctx, agent, { id: threadId, slug }, body.prompt, true);
+          const turn = await submitTurn(
+            ctx,
+            agent,
+            { id: threadId, slug },
+            body.prompt,
+            true,
+            progress,
+            save,
+          );
           turnId = turn.turn_id;
           sessionId = turn.session_id;
           save({ turn_id: turnId, session_id: sessionId });
@@ -311,7 +349,7 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
         let turnId = progress.turn_id as string | undefined;
         let sessionId = progress.session_id as string | undefined;
         if (!turnId) {
-          const turn = await submitTurn(ctx, agent, thread, body.message, false);
+          const turn = await submitTurn(ctx, agent, thread, body.message, false, progress, save);
           turnId = turn.turn_id;
           sessionId = turn.session_id;
           save({ turn_id: turnId, session_id: sessionId });

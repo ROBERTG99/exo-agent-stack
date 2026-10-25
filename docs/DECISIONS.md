@@ -247,3 +247,10 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Why:** the review found that `rg -n todo *` can expand to a file named `--pre=sh`; that `git status` runs `core.fsmonitor` from a `.git/config` an agent may have written; and, in later rounds, that signature checking (`log.showSignature`, `%G` formats, a repository-defined format name) runs `gpg.program` from the same file, and that the clean filters run by work-tree `status` and `diff` execute configured programs too. A `-c` on the command line outranks every config file, so requiring it makes the approved text itself the guarantee; commands whose config exposure cannot be closed by flags are not vouched for.
 - **Evidence:** `tests/unit/shell-safety.test.ts` and `tests/unit/approvals.test.ts` (`pnpm exec vitest run --project unit tests/unit/shell-safety.test.ts tests/unit/approvals.test.ts`: 240 tests).
 - **Cost:** agents that want bridge approval for git reads must write the longer form; a plain `git status` goes to the dashboard.
+
+## 2026-10-25 · A turn whose reply was lost is adopted, not repeated (M3 review)
+
+- **Decision:** before `thread.start` or `turn.send` asks Exo for a turn, stackd saves the newest `turn_started` id of the thread as `submit_after` in the idempotency progress. A retry with the same key that finds a newer turn there adopts it (finished or not) instead of submitting again; a retry that finds none submits, after the capacity check. The 409 adoption of a running turn stays.
+- **Why:** the review reproduced a 503 after Exo had accepted the turn: the retry started a second turn with the same input (BUILD.md §4.9, never repeat a step). The key used to be freed whenever nothing was saved, and the turn step saved only after Exo answered.
+- **Evidence:** `tests/integration/threads.test.ts`, "a turn whose reply was lost" (3 tests, with a fetch that drops the answer to the first turn request).
+- **Residual risk:** it assumes nothing else starts a turn on the same thread between the two attempts; stackd is the only Exo writer for these threads and Exo answers 409 while a turn runs.
