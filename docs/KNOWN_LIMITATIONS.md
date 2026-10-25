@@ -85,3 +85,25 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 - **What:** `exos agents sync` creates agents with `POST /exo/agent/managed` and updates them with `PUT /exo/agent/{id}/definition` (BUILD.md §4.2). The spec says only that the body is "built from the parsed Markdown" (V-11). `managedAgentBody` sends `{slug, definition, instructions}` with the definition's relative paths made absolute, and is the only code that changes when V-11 is verified. Idempotence does not depend on that shape: a state file keeps the sha256 of each body and the agent id, and Exo's own agent list decides whether an agent still exists.
 - **Tested against:** an in-process Exo double with the same endpoints (14 tests). Not tested against a real Exo.
 - **Count:** the catalogue has seven agents (FR-2's "7 unchanged"). The generated `dual-review-cursor` fallback is synced as well, so a second run reports 8 unchanged, the seven catalogue names among them.
+
+## Exo verification items and the fallback each one uses
+
+None of V-1 to V-16 could be verified because the pinned source was not available (see
+`docs/exo-verification.md`, which names where to look for each). The fallback in use:
+
+- **V-1** (bearer token on `--serve`): the client sends one only if configured; loopback bind is the protection.
+- **V-2** (custom harness without `model.credential`): Mode A declares none; Mode B's patch route (ADR 0003) if it fails.
+- **V-3** (provider value `local_process`): used in `environments/*.yaml`; only stackd's translation would change.
+- **V-4** (`fork --up-to` over HTTP): `exo_fork` with `at` returns `fork_at_unsupported`.
+- **V-5** (snapshot trigger): snapshot markers are a fork plus a git tag.
+- **V-6** (agent front matter shape): the linter implements BUILD.md §4.5 and rejects unknown keys.
+- **V-7** (`messages.usage` for a custom harness): Mode A maps Claude's usage as documented in `docs/DECISIONS.md`.
+- **V-8** (policy tool names): `claude.<Tool>` from one function, `toExoToolName`.
+- **V-9** (bearer substitution): Mode B is `unsupported`.
+- **V-10** (health probe): stackd lists agents, as BUILD.md §4.2 says.
+- **V-11** (managed-agent body): `managedAgentBody`, one function.
+- **V-12** (`TurnContext` and `defineHarness`): tested loops, placeholder harness modules.
+- **V-13** (`defineTool` and the artifact API): tested tool behaviour, no wrappers.
+- **V-14** (`exo vault secret create` flags): the scripts check `--help` first.
+- **V-15** (Cursor SDK hosts): the `reviewer-cursor` allowlist is empty.
+- **V-16** (`exo environment create|update`): this stack's own YAML, translated in one place.
