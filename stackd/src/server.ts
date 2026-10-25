@@ -3,12 +3,21 @@ import Fastify, { type FastifyInstance } from "fastify";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePort, resolveListenHost } from "@exos/common";
-import { listAgents } from "./agents.ts";
-import { openCredit, type AppContext, type CreditGate } from "./context.ts";
+import { AgentDirectory } from "./agents.ts";
+import type { AppContext } from "./context.ts";
+import {
+  CreditGuard,
+  DEFAULT_CREDIT_CONFIG,
+  loadCreditConfig,
+  type CreditConfig,
+} from "./credit.ts";
 import { appendAudit, defaultMigrationsDir, migrate, openDatabase, type Db } from "./db/index.ts";
 import { toProblem } from "./errors.ts";
 import { Idempotency } from "./idempotency.ts";
+import { Meter } from "./meter.ts";
+import { loadRates } from "./pricing.ts";
 import { problem } from "./problem.ts";
+import { registerCreditRoutes } from "./routes/credit.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerThreadRoutes } from "./routes/threads.ts";
 import { ensureLocalToken, tokenMatches } from "./token.ts";
@@ -25,7 +34,10 @@ export interface StackdOptions {
   allowedWorkspaceRoots?: string[];
   /** Overrides for the Exo client, for example `retries: 0` in tests. */
   exoClient?: Partial<ExoClientOptions>;
-  credit?: CreditGate;
+  credit?: CreditConfig;
+  /** Pass the meter runs at, in seconds; 0 (the default) leaves it to the caller (tests, `main`). */
+  meterIntervalSeconds?: number;
+  ratesFile?: string;
   clock?: () => Date;
 }
 
@@ -56,6 +68,8 @@ export interface Stackd {
   app: FastifyInstance;
   token: string;
   db: Db;
+  meter: Meter;
+  credit: CreditGuard;
   ctx: AppContext;
   /** Closes the HTTP server and the database. */
   close(): Promise<void>;
@@ -70,6 +84,32 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   const exo = new ExoClient({ baseUrl: opts.exoUrl, fetch: opts.fetchImpl, ...opts.exoClient });
   const idem = new Idempotency(db, clock);
   idem.purge();
+  const audit: AppContext["audit"] = (action, target, details) => {
+    appendAudit(db, { actor: "api", action, target, details }, clock);
+  };
+  const creditConfig = opts.credit ?? DEFAULT_CREDIT_CONFIG;
+  const credit = new CreditGuard({
+    db,
+    config: creditConfig,
+    clock,
+    audit: (action, target, details) =>
+      void appendAudit(db, { actor: "system", action, target, details }, clock),
+  });
+  const agents = new AgentDirectory(exo);
+  const meter = new Meter({
+    db,
+    exo,
+    agents,
+    rates: loadRates(
+      opts.ratesFile ?? fileURLToPath(new URL("../../pricing/api-rates.v1.json", import.meta.url)),
+    ),
+    cycle: creditConfig.cycle,
+    clock,
+    onIngested: (touched) => {
+      for (const { pool } of touched) credit.refresh(pool);
+    },
+  });
+  if ((opts.meterIntervalSeconds ?? 0) > 0) meter.start(opts.meterIntervalSeconds!);
   const ctx: AppContext = {
     db,
     exo,
@@ -78,12 +118,12 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
       baseDir: path.join(opts.stateDir, "worktrees"),
       allowedRoots: opts.allowedWorkspaceRoots ?? [],
     }),
-    credit: opts.credit ?? openCredit,
+    credit,
+    meter,
+    agents,
     clock,
     dashboardUrl: `http://127.0.0.1:${dashboardPort}`,
-    audit: (action, target, details) => {
-      appendAudit(db, { actor: "api", action, target, details }, clock);
-    },
+    audit,
   };
   const app = Fastify({ logger: false, forceCloseConnections: true });
 
@@ -153,16 +193,19 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   });
 
   app.get("/api/v1/agents", { preHandler: requireToken }, async () => ({
-    agents: await listAgents(exo),
+    agents: await agents.list(),
   }));
+
+  registerCreditRoutes(app, ctx, requireToken, creditConfig);
 
   registerThreadRoutes(app, ctx, requireToken);
   registerEventRoutes(app, ctx, requireToken);
 
   app.addHook("onClose", async () => {
+    meter.stop();
     db.close();
   });
-  return { app, token, db, ctx, close: () => app.close() };
+  return { app, token, db, meter, credit, ctx, close: () => app.close() };
 }
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<FastifyInstance> {
@@ -174,6 +217,8 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<Fastif
     exoUrl: env.EXOS_EXO_URL || `http://127.0.0.1:${exoPort}/exo`,
     publicPort: port,
     dashboardPort: parsePort(env.EXOS_DASHBOARD_PORT, 9800),
+    credit: loadCreditConfig(env),
+    meterIntervalSeconds: Number(env.EXOS_METER_INTERVAL_SECONDS || 15),
     allowedWorkspaceRoots: (env.EXOS_ALLOWED_WORKSPACE_ROOTS ?? "")
       .split(path.delimiter)
       .filter(Boolean),

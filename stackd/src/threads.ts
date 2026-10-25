@@ -1,7 +1,7 @@
 // Looking up threads in Exo and deriving a thread's state from its events. Exo owns the data;
 // nothing here is copied into SQLite (BUILD.md §4.4).
 import type { ExoClient, ExoEvent } from "@exos/exo-client";
-import { resolveAgent, poolOf, type AgentInfo } from "./agents.ts";
+import { poolOf, type AgentInfo } from "./agents.ts";
 import type { AppContext } from "./context.ts";
 import { notFound } from "./errors.ts";
 
@@ -56,11 +56,11 @@ export async function listThreads(exo: ExoClient, agentId: string): Promise<Thre
 
 /** `<agent>/<thread>`: the agent by slug or id, the thread by unique slug or id. */
 export async function resolveThread(
-  ctx: Pick<AppContext, "exo">,
+  ctx: Pick<AppContext, "agents" | "exo">,
   agentRef: string,
   threadRef: string,
 ): Promise<{ agent: AgentInfo; thread: ThreadInfo }> {
-  const agent = await resolveAgent(ctx.exo, agentRef);
+  const agent = await ctx.agents.resolve(agentRef);
   const thread = (await listThreads(ctx.exo, agent.id)).find(
     (t) => t.slug === threadRef || t.id === threadRef,
   );

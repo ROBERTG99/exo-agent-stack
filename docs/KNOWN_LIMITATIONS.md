@@ -128,3 +128,8 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 
 - **What:** `GET /api/v1/threads/{agent}/{thread}/lineage` finds a fork's parent and a thread's children from `forked_from` and `forked_at_event_id` on `thread_forked` events, and scans at most 200 threads of the agent. Exo's real event fields are unverified (V-4), so against a real Exo the endpoint may report no lineage.
 - **Closes when:** the maintainer's Exo run records a `thread_forked` event (`make record-exo-fixtures`) and the field names are confirmed or adapted.
+
+## Credit stop on a cold agent cache, and cancel-active not yet wired
+
+- **What:** the 402 check before any Exo request needs the agent's pool, which stackd knows from the catalogue it last read. Right after a start, before any read, the first start request does one catalogue lookup in Exo before the credit check. `EXOS_CREDIT_CANCEL_ACTIVE` is parsed and reported by `/api/v1/credit` but nothing cancels active turns yet (T-28).
+- **Closes when:** the supervisor (T-28) cancels active turns on a transition to `stop` and warms the directory at start-up.

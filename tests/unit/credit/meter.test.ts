@@ -103,6 +103,15 @@ describe("costMicros", () => {
     expect(costMicros({ prompt_tokens: M }, rates).source).toBe("max_estimate");
   });
 
+  it("never mistakes an inherited property for a listed model", () => {
+    for (const model of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) {
+      expect(costMicros(usage({ model, prompt_tokens: M }), rates), model).toEqual({
+        micros: 10_000_000,
+        source: "max_estimate",
+      });
+    }
+  });
+
   it("charges nothing for no tokens, and always nothing in the local pool", () => {
     expect(costMicros(usage(), rates)).toEqual({ micros: 0, source: "exo" });
     expect(costMicros(usage({ prompt_tokens: M, cost_usd: 5 }), rates, "local")).toEqual({
@@ -314,6 +323,24 @@ describe("Meter.ingestOnce", () => {
     expect((await meter.ingestOnce()).ingested).toBe(450);
     expect(stub.calls.filter((c) => c.thread === "thr_1").length).toBe(3);
     expect(db.prepare("SELECT COUNT(*) AS n FROM usage_events").get()).toEqual({ n: 450 });
+  });
+
+  it("meters an event with a hostile model id at the highest rate and keeps going", async () => {
+    const { meter, db } = meterWith({
+      thr_1: [
+        msg("1", { ...U, model: "__proto__" }),
+        msg("2", { ...U, model: "constructor" }),
+        msg("3", U),
+      ],
+    });
+    expect((await meter.ingestOnce()).ingested).toBe(3);
+    expect(
+      db.prepare("SELECT model, cost_source FROM usage_events ORDER BY event_id").all(),
+    ).toEqual([
+      { model: "__proto__", cost_source: "max_estimate" },
+      { model: "constructor", cost_source: "max_estimate" },
+      { model: "claude-opus-5-5", cost_source: "price_table" },
+    ]);
   });
 
   it("shares one pass between overlapping calls", async () => {

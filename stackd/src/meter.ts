@@ -2,7 +2,7 @@
 // row per event. Exo stays the source of truth; this table only makes spend queryable and lets the
 // credit guard refuse work before it starts. Turns started outside the stack are metered too.
 import { usageOf, type ExoClient } from "@exos/exo-client";
-import { listAgents, poolOf } from "./agents.ts";
+import { listAgents, poolOf, type AgentDirectory } from "./agents.ts";
 import type { Pool } from "./context.ts";
 import { cycleOf, type CycleConfig } from "./cycle.ts";
 import type { Db } from "./db/index.ts";
@@ -13,6 +13,8 @@ export interface MeterOptions {
   db: Db;
   exo: ExoClient;
   rates: RateTable;
+  /** Fills the agent cache as a side effect of each pass. */
+  agents?: AgentDirectory;
   cycle: CycleConfig;
   clock?: () => Date;
   /** Called after rows were stored, once per (cycle, pool) that changed. */
@@ -70,7 +72,7 @@ export class Meter {
     const result: IngestResult = { ingested: 0, threads: 0, touched: [] };
     const touched = new Map<string, { cycle: string; pool: Pool }>();
 
-    for (const agent of await listAgents(exo)) {
+    for (const agent of await (this.o.agents ? this.o.agents.list() : listAgents(exo))) {
       const pool = poolOf(agent);
       for (const thread of await listThreads(exo, agent.id)) {
         result.threads++;
@@ -91,7 +93,14 @@ export class Meter {
               if (!usage) continue;
               const at = Date.parse(String((event as Record<string, unknown>).ts ?? ""));
               const cycle = cycleOf(Number.isNaN(at) ? this.clock() : new Date(at), this.o.cycle);
-              const cost = costMicros(usage, this.o.rates, pool);
+              // One malformed event must not stop the pass (and with it all later metering):
+              // price it at the highest rate instead.
+              let cost: ReturnType<typeof costMicros>;
+              try {
+                cost = costMicros(usage, this.o.rates, pool);
+              } catch {
+                cost = costMicros({ ...usage, model: null, cost_usd: null }, this.o.rates, pool);
+              }
               const inserted = db
                 .prepare(
                   `INSERT OR IGNORE INTO usage_events

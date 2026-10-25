@@ -5,7 +5,8 @@ import { sha256Hex } from "@exos/common";
 import { askUserDeclaration } from "@exos/tools/ask-user";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { listAgents, poolOf, resolveAgent } from "../agents.ts";
+import { poolOf } from "../agents.ts";
+import { bannerFor } from "../credit.ts";
 import type { AppContext } from "../context.ts";
 import { ApiError } from "../errors.ts";
 import type { Json } from "../idempotency.ts";
@@ -54,6 +55,11 @@ function splitVerb(param: string): [string, string | undefined] {
 }
 
 const frontendTools = () => [askUserDeclaration];
+
+const bannerField = (state: "ok" | "warn" | "stop"): { banner?: string } => {
+  const banner = bannerFor(state);
+  return banner ? { banner } : {};
+};
 
 /** The turn started by a request that crashed before it could be recorded, found in the event log. */
 async function adoptActiveTurn(
@@ -104,7 +110,7 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
 
   app.get("/api/v1/agents/:agent/threads", pre, async (request) => {
     const { agent: ref } = request.params as { agent: string };
-    const agent = await resolveAgent(ctx.exo, ref);
+    const agent = await ctx.agents.resolve(ref);
     return {
       agent_id: agent.id,
       threads: (await listThreads(ctx.exo, agent.id)).map((t) => ({
@@ -124,7 +130,10 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
       "thread.start",
       body,
       async (progress, save) => {
-        const known = await listAgents(ctx.exo);
+        // A stopped pool is refused before any Exo request, using the agent as last seen.
+        const seen = ctx.agents.peek(body.agent);
+        if (seen) ctx.credit.assertCanSpend(seen);
+        const known = await ctx.agents.list();
         const agent = known.find((a) => a.slug === body.agent || a.id === body.agent);
         if (!agent)
           throw new ApiError(404, "not_found", "Not found", `agent ${body.agent} not found`);
@@ -183,6 +192,7 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
           ...(worktreePath ? { worktree_path: worktreePath } : {}),
           dashboard_url: `${ctx.dashboardUrl}/threads/${agent.slug}/${slug}`,
           credit_state: ctx.credit.state(poolOf(agent)),
+          ...bannerField(ctx.credit.state(poolOf(agent))),
         } satisfies Json;
       },
     );
@@ -219,6 +229,8 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
       "thread.fork",
       { ...body, thread: t, agent: a },
       async () => {
+        const early = ctx.agents.peek(a);
+        if (early) ctx.credit.assertCanSpend(early);
         const { agent, thread } = await resolveThread(ctx, a, t);
         ctx.credit.assertCanSpend(agent);
         const forked = await ctx.exo.forkThread(
@@ -248,6 +260,8 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
       "turn.send",
       { ...body, thread: t, agent: a },
       async (progress, save) => {
+        const early = ctx.agents.peek(a);
+        if (early) ctx.credit.assertCanSpend(early);
         const { agent, thread } = await resolveThread(ctx, a, t);
         ctx.credit.assertCanSpend(agent);
         let turnId = progress.turn_id as string | undefined;
@@ -264,7 +278,13 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
           message_chars: body.message.length,
           message_sha256: sha256Hex(body.message),
         });
-        return { turn_id: turnId, session_id: sessionId ?? "" } satisfies Json;
+        const creditState = ctx.credit.state(poolOf(agent));
+        return {
+          turn_id: turnId,
+          session_id: sessionId ?? "",
+          credit_state: creditState,
+          ...bannerField(creditState),
+        } satisfies Json;
       },
     );
     return reply.code(replayed ? 200 : 201).send({ ...value, replayed });

@@ -63,7 +63,7 @@ export function highestRates(table: RateTable): Rates {
 
 /** tokens × (micro-dollars per million tokens), rounded up: an estimate never undercounts. */
 function priceTokens(tokens: number, perMillion: number): number {
-  if (tokens <= 0 || perMillion <= 0) return 0;
+  if (!Number.isFinite(perMillion) || tokens <= 0 || perMillion <= 0) return 0;
   const product = BigInt(tokens) * BigInt(perMillion);
   return Number((product + 999_999n) / 1_000_000n);
 }
@@ -97,7 +97,9 @@ export function costMicros(
     count(usage.completion_tokens);
   if (tokens === 0) return { micros: 0, source: "exo" };
 
-  const entry = usage.model ? table.models[usage.model] : undefined;
+  // Own keys only: a model id such as "constructor" must not find an inherited property.
+  const entry =
+    usage.model && Object.hasOwn(table.models, usage.model) ? table.models[usage.model] : undefined;
   if (!entry) return { micros: tokenCost(usage, highestRates(table)), source: "max_estimate" };
   const promptSize =
     count(usage.prompt_tokens) +

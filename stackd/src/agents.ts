@@ -59,3 +59,34 @@ export async function resolveAgent(exo: ExoClient, ref: string): Promise<AgentIn
   if (!found) throw notFound(`agent ${ref}`);
   return found;
 }
+
+/**
+ * The agent catalogue as last seen. Routes check credit against a cached entry before they make
+ * any Exo request, so a stopped pool is refused without touching Exo (BUILD.md §4.8). The cache
+ * fills whenever the catalogue is read, including by the meter's regular passes.
+ */
+export class AgentDirectory {
+  private readonly byRef = new Map<string, AgentInfo>();
+
+  constructor(private readonly exo: ExoClient) {}
+
+  async list(): Promise<AgentInfo[]> {
+    const agents = await listAgents(this.exo);
+    this.byRef.clear();
+    for (const a of agents) {
+      this.byRef.set(a.slug, a);
+      this.byRef.set(a.id, a);
+    }
+    return agents;
+  }
+
+  peek(ref: string): AgentInfo | undefined {
+    return this.byRef.get(ref);
+  }
+
+  async resolve(ref: string): Promise<AgentInfo> {
+    const found = (await this.list()).find((a) => a.slug === ref || a.id === ref);
+    if (!found) throw notFound(`agent ${ref}`);
+    return found;
+  }
+}
