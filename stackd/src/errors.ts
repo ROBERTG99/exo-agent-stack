@@ -53,6 +53,14 @@ export function toProblem(err: unknown): ProblemShape | undefined {
   if (err instanceof ExoHttpError) {
     const body = err.body as { error?: { code?: string } } | undefined;
     if (err.status === 404) return { status: 404, code: "not_found", title: "Not found" };
+    if (err.status === 400) {
+      return {
+        status: 400,
+        code: "invalid_input",
+        title: "Invalid input",
+        detail: "Exo rejected the request as malformed",
+      };
+    }
     if (err.status === 409) {
       const code = body?.error?.code === "turn_active" ? "turn_active" : "exo_conflict";
       return { status: 409, code, title: "Conflict", detail: `Exo answered 409 (${code})` };

@@ -123,3 +123,8 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 
 - **What:** (1) `resources` in `POST /api/v1/threads` are checked against `EXOS_ALLOWED_WORKSPACE_ROOTS` and audited, but nothing mounts them, because the thread-create body in BUILD.md §4.2 has no field for them. (2) The harness is expected to find the worktree at `<state dir>/worktrees/<thread slug>`. (3) Thread status looks at the newest 200 events, so a request that has been open for longer than that window shows as not pending. (4) `EXOS_MAX_ACTIVE_TURNS` is not enforced yet (T-28).
 - **Closes when:** the maintainer's Exo run shows how a harness receives a workspace and extra mounts (V-3, V-12); the supervisor in T-28 tracks active turns.
+
+## Lineage reads the simulator's `thread_forked` shape
+
+- **What:** `GET /api/v1/threads/{agent}/{thread}/lineage` finds a fork's parent and a thread's children from `forked_from` and `forked_at_event_id` on `thread_forked` events, and scans at most 200 threads of the agent. Exo's real event fields are unverified (V-4), so against a real Exo the endpoint may report no lineage.
+- **Closes when:** the maintainer's Exo run records a `thread_forked` event (`make record-exo-fixtures`) and the field names are confirmed or adapted.

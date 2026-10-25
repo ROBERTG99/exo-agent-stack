@@ -9,6 +9,7 @@ import { appendAudit, defaultMigrationsDir, migrate, openDatabase, type Db } fro
 import { toProblem } from "./errors.ts";
 import { Idempotency } from "./idempotency.ts";
 import { problem } from "./problem.ts";
+import { registerEventRoutes } from "./routes/events.ts";
 import { registerThreadRoutes } from "./routes/threads.ts";
 import { ensureLocalToken, tokenMatches } from "./token.ts";
 import { WorktreeManager } from "./worktrees.ts";
@@ -84,7 +85,7 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
       appendAudit(db, { actor: "api", action, target, details }, clock);
     },
   };
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, forceCloseConnections: true });
 
   app.setErrorHandler((err, _request, reply) => {
     const known = toProblem(err);
@@ -156,6 +157,7 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   }));
 
   registerThreadRoutes(app, ctx, requireToken);
+  registerEventRoutes(app, ctx, requireToken);
 
   app.addHook("onClose", async () => {
     db.close();
