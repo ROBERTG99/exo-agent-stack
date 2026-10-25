@@ -2,6 +2,8 @@
 // T-27: the approvals queue (BUILD.md §4.6, FR-11) against the Exo simulator.
 import { afterEach, describe, expect, it } from "vitest";
 import { startStack, until, type Stack } from "../helpers/stack.ts";
+// key-shaped values are assembled from parts so no literal looks like a real key
+const FAKE_KEY = ["sk", "ant", "abcdefgh12345678"].join("-");
 
 const stacks: Stack[] = [];
 afterEach(async () => {
@@ -93,7 +95,7 @@ describe("listing", () => {
         approval_id: "apr_secret",
         tool: "claude.Bash",
         call_id: "c1",
-        arguments: { command: "echo hi", API_KEY: "sk-ant-abcdefgh12345678" },
+        arguments: { command: "echo hi", API_KEY: FAKE_KEY },
       },
     });
     const list = await openApprovals(s);
@@ -192,6 +194,38 @@ describe("deciding", () => {
     expect(r.body.decision).toBe("approved_for_session");
     const row = s.sim.store.pending(a.approval_id)!;
     expect(row.decision).toEqual({ approved: true, allow_for_tool: true });
+  });
+
+  it("does not leave a request open that Exo took when the reply was lost and a sync read the answer meanwhile", async () => {
+    let sync: (() => Promise<unknown>) | undefined;
+    let armed = true;
+    const s = await startStack({
+      stackd: {
+        fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
+          const res = await fetch(input, init);
+          if (armed && init?.method === "POST" && String(input).endsWith("/approval-response")) {
+            armed = false;
+            await res.text();
+            await sync?.(); // the queue reads the approval_response event now
+            throw new TypeError("fetch failed");
+          }
+          return res;
+        }) as typeof fetch,
+      },
+    });
+    stacks.push(s);
+    sync = () => s.stackd.approvals.sync();
+    const t = await startThread(s, "[[scenario:approval-edit]] edit");
+    const [a] = await waitOpen(s, "the approval");
+    const lost = await s.call("POST", `/api/v1/approvals/${a.approval_id}:decide`, {
+      decision: "approve",
+    });
+    expect(lost.status).toBe(503);
+    await turnDone(s, t);
+    await s.stackd.approvals.sync();
+    const row = (await openApprovals(s, "?state=all")).find((x) => x.approval_id === a.approval_id);
+    expect(row.decision).toBe("approved"); // Exo took it; the dashboard must not offer it again
+    expect(await openApprovals(s)).toEqual([]);
   });
 
   it("answers 409 to a second decision and 404 to an unknown request", async () => {

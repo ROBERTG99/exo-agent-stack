@@ -242,13 +242,25 @@ export class ApprovalQueue {
     );
   }
 
-  /** Puts a claimed row back (Exo could not take the answer), so the decision can be retried. */
+  /**
+   * Puts a claimed row back (Exo could not take the answer), so the decision can be retried. The
+   * answer may have reached Exo anyway (the reply was lost), and a sync may already have read its
+   * event while the row was claimed, which closes nothing; so the thread is read again from its
+   * start, and a row Exo did settle is closed by the event instead of staying open.
+   */
   release(id: string, previous: Decision): void {
-    this.o.db
-      .prepare(
-        "UPDATE approvals SET decision = ?, decided_by = NULL, decided_at = NULL WHERE approval_id = ?",
-      )
-      .run(previous, id);
+    this.o.db.transaction(() => {
+      this.o.db
+        .prepare(
+          "UPDATE approvals SET decision = ?, decided_by = NULL, decided_at = NULL WHERE approval_id = ?",
+        )
+        .run(previous, id);
+      this.o.db
+        .prepare(
+          "DELETE FROM approval_cursors WHERE thread_id = (SELECT thread_id FROM approvals WHERE approval_id = ?)",
+        )
+        .run(id);
+    })();
   }
 
   /** One pass over every thread; overlapping calls share it. */

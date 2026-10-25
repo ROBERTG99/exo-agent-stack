@@ -121,8 +121,8 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 
 ## stackd threads API: conventions Exo has not confirmed
 
-- **What:** (1) `resources` in `POST /api/v1/threads` are checked against `EXOS_ALLOWED_WORKSPACE_ROOTS` and audited, but nothing mounts them, because the thread-create body in BUILD.md §4.2 has no field for them. (2) The harness is expected to find the worktree at `<state dir>/worktrees/<thread slug>`. (3) Thread status looks at the newest 200 events, so a request that has been open for longer than that window shows as not pending. (4) `EXOS_MAX_ACTIVE_TURNS` is not enforced yet (T-28).
-- **Closes when:** the maintainer's Exo run shows how a harness receives a workspace and extra mounts (V-3, V-12); the supervisor in T-28 tracks active turns.
+- **What:** (1) `resources` in `POST /api/v1/threads` are checked against `EXOS_ALLOWED_WORKSPACE_ROOTS` and audited, but nothing mounts them, because the thread-create body in BUILD.md §4.2 has no field for them. (2) The harness is expected to find the worktree at `<state dir>/worktrees/<thread slug>`. (3) Thread status looks at the newest 200 events, so a request that has been open for longer than that window shows as not pending.
+- **Closes when:** the maintainer's Exo run shows how a harness receives a workspace and extra mounts (V-3, V-12).
 
 ## Lineage reads the simulator's `thread_forked` shape
 

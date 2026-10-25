@@ -273,3 +273,8 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Decision:** the pid record keeps the arguments a service was started with, and a pid counts as ours only if `ps -ww` shows the program and every recorded argument (the service's script). A record without arguments, a dead pid or a failing `ps` is not ours: `down` removes the stale record and signals nothing; `up` starts the service again.
 - **Why:** the old check accepted any command line containing "node", and returned true when `ps` failed, so after a reboot a stale pid file could point `down` at an IDE or dev server (reproduced with a decoy node process).
 - **Evidence:** `tests/integration/host.test.ts` ("never signals a process that only happens to have a recorded pid and is also node").
+
+## 2026-10-25 · A released approval is re-read from Exo (M3 review)
+
+- **Decision:** when Exo cannot be told an answer (timeout, reset), the queue puts the row back and also forgets the thread's read position, so the next sync reads the thread from its start. If the answer had reached Exo after all, its `approval_response` event now closes the row as decided; before, a sync that had passed the event while the row was claimed left it open, and it ended as `denied/turn_ended`.
+- **Evidence:** `tests/integration/approvals.test.ts` ("does not leave a request open that Exo took when the reply was lost ..."). Re-reading is safe because adding a request is `INSERT OR IGNORE` and closing only touches open rows.

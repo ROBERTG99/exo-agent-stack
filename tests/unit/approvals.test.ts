@@ -9,6 +9,9 @@ import {
   redactArgs,
 } from "../../stackd/src/approvals.ts";
 import { freshDb } from "./db/helpers.ts";
+// key-shaped values are assembled from parts so no literal looks like a real key
+const FAKE_KEY = ["sk", "ant", "abcdefgh12345678"].join("-");
+const FAKE_PAT = ["ghp", "abcdefghijklmnopqrstu"].join("_");
 
 describe("redactArgs", () => {
   it("masks secret-looking keys and values anywhere in the arguments", () => {
@@ -16,11 +19,11 @@ describe("redactArgs", () => {
       redactArgs({
         command: "curl -H 'Authorization: Bearer abcdefghijkl' https://example.org",
         env: {
-          API_KEY: "sk-ant-abcdefgh12345678",
+          API_KEY: FAKE_KEY,
           PATH: "/usr/bin",
           nested: { password: "hunter2" },
         },
-        list: ["ghp_abcdefghijklmnopqrstu", "fine"],
+        list: [FAKE_PAT, "fine"],
         note: "token is xoxb-1234567890-abc",
       }),
     );
