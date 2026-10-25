@@ -43,3 +43,10 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Decision:** `.claude/settings.json` allows named `make` targets, named `pnpm exec <tool>` forms, `git push origin ...` and `docker compose <verb>`; it denies `Read(./.env)` and nested variants plus the three live make targets. No `node:*`, `pnpm:*`, `uv:*`, `make:*` or `git push:*`.
 - **Alternatives:** broad wildcard entries (fewer prompts, but they allow arbitrary code execution through the allow list).
 - **Reason:** the automated security review flagged the wildcard entries and the missing plain `.env` deny. The spec (§7.1) only requires the entries it lists; the extra convenience entries are ours to keep tight. Force pushes, identity changes and live targets are additionally blocked by `guard.mjs`.
+
+## 2026-10-25 · Guard hardening after the second automated security review
+
+- **Decision:** `guard.mjs` now (a) blocks destructive pushes (`--delete`, `-d`, `--mirror`, `--prune`, `:ref` and `+ref` refspecs, combined short flags containing `f` or `d`), (b) recurses into `bash|sh|zsh -c`, `eval`, `$(...)`, backticks and `xargs`/`timeout` wrappers up to depth 3, and (c) checks `--bind`, `--host`, `--listen`, `--preview-domain` and docker `-p/--publish` values against a loopback allowlist instead of denying known-bad values; `-P/--publish-all` is blocked. `Bash(pnpm --filter:*)` and `Bash(pnpm exec tsx scripts/:*)` were removed from the allow list (every script already runs through a `make` target).
+- **Kept:** `Bash(pnpm add:*)` and `Bash(pnpm install:*)`. pnpm 10 does not run dependency lifecycle scripts unless the package is listed in `onlyBuiltDependencies` (currently only `esbuild`), so the residual risk is the choice of package, which is reviewed in the lockfile diff.
+- **Limits, stated honestly:** the guard is a best-effort text check, not a sandbox. The authoritative controls are the `deny` rules, the permission classifier and the reviewers; the guard catches the accidental case and the common indirections.
+- **Reason:** second automated review (settings.json allow list, guard bypass via shell indirection, loopback denylist differential).

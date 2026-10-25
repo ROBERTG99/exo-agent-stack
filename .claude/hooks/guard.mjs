@@ -62,6 +62,8 @@ function stripPrefix(segment) {
   for (;;) {
     const next = s
       .replace(/^(?:sudo|command|exec|nohup|time|env)\s+/, "")
+      .replace(/^timeout\s+\S+\s+/, "")
+      .replace(/^xargs\s+(?:-\S+\s+)*/, "")
       .replace(/^-u\s+\S+\s+/, "")
       .replace(/^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "");
     // Also drop the directory of the command itself so /opt/homebrew/bin/claude matches `claude`.
@@ -70,9 +72,45 @@ function stripPrefix(segment) {
   }
 }
 
+/** Command strings hidden inside bash -c, eval, $(...) and backticks, so indirection cannot dodge the rules. */
+function nestedCommands(command) {
+  const out = [];
+  const quoted = String.raw`("(?:[^"\\]|\\.)*"|'[^']*')`;
+  const unquote = (q) => q.slice(1, -1).replace(/\\(.)/g, "$1");
+  const shell = new RegExp(
+    String.raw`\b(?:bash|sh|zsh|dash|ksh)\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c\s+${quoted}`,
+    "g",
+  );
+  for (const m of command.matchAll(shell)) out.push(unquote(m[1]));
+  for (const m of command.matchAll(new RegExp(String.raw`\beval\s+${quoted}`, "g")))
+    out.push(unquote(m[1]));
+  for (const m of command.matchAll(/\$\(([^()]*)\)/g)) out.push(m[1]);
+  for (const m of command.matchAll(/`([^`]*)`/g)) out.push(m[1]);
+  return out;
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
+/** True when a bind/host/publish value names only a loopback address (any port). */
+function isLoopbackValue(value) {
+  const v = value.replace(/^["']|["']$/g, "");
+  const bracket = v.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracket) return LOOPBACK_HOSTS.has(bracket[1]);
+  if ((v.match(/:/g) ?? []).length > 1) return LOOPBACK_HOSTS.has(v);
+  return LOOPBACK_HOSTS.has(v.replace(/:\d+$/, ""));
+}
+
+function flagValues(seg, names) {
+  const re = new RegExp(
+    String.raw`(?:^|\s)(?:${names.join("|")})(?:=|\s+)("[^"]*"|'[^']*'|\S+)`,
+    "g",
+  );
+  return [...seg.matchAll(re)].map((m) => m[1]);
+}
+
 const firstWord = (s) => (s.split(/\s+/)[0] ?? "").replace(/^.*\//, "");
 
-function bashRules(command) {
+function bashRules(command, depth = 0) {
   if (KEY_LITERAL.test(command))
     return block(
       "no-key-literal",
@@ -106,6 +144,13 @@ function bashRules(command) {
     );
   }
 
+  if (depth < 3) {
+    for (const inner of nestedCommands(command)) {
+      const verdict = bashRules(inner, depth + 1);
+      if (verdict) return verdict;
+    }
+  }
+
   for (const raw of segments(command)) {
     const seg = stripPrefix(raw);
     const word = firstWord(seg);
@@ -134,14 +179,21 @@ function bashRules(command) {
       );
     }
     if (/^git\b/.test(seg)) {
-      if (
-        /\bpush\b/.test(seg) &&
-        /(?:\s--force\b|\s--force-with-lease\b|\s-f\b|\s\+[^\s]+)/.test(seg)
-      ) {
-        return block(
-          "no-force-push",
-          "Force pushes are forbidden. If a bad commit was pushed, list it under 'Needs the maintainer'.",
+      const tokens = seg.split(/\s+/);
+      if (tokens.includes("push")) {
+        const destructive = tokens.some(
+          (t) =>
+            ["--force", "--force-with-lease", "--delete", "--mirror", "--prune"].includes(t) ||
+            t.startsWith("--force-with-lease=") ||
+            /^-[A-Za-z]*[fd][A-Za-z]*$/.test(t) ||
+            /^[+:]/.test(t),
         );
+        if (destructive) {
+          return block(
+            "no-force-push",
+            "Force pushes, branch or tag deletions, mirror and prune pushes are forbidden. If a bad commit was pushed, list it under 'Needs the maintainer'.",
+          );
+        }
       }
       if (
         /\bconfig\b/.test(seg) &&
@@ -161,7 +213,7 @@ function bashRules(command) {
         );
       }
     }
-    if (LAUNCHERS.has(word) || /--bind\b|--host\b/.test(seg)) {
+    if (LAUNCHERS.has(word) || /--(?:bind|host|hostname|listen|address)\b/.test(seg)) {
       if (/--auth-file\b|--multiplayer\b/.test(seg)) {
         return block(
           "loopback-only",
@@ -174,16 +226,48 @@ function bashRules(command) {
           "Binding 0.0.0.0 is forbidden; every listener binds 127.0.0.1 (rail 3).",
         );
       }
-      if (/--preview-domain[=\s]+(?![^\s]*localhost)\S+/.test(seg)) {
-        return block("loopback-only", "--preview-domain must be a localhost name (rail 3).");
+      for (const v of flagValues(seg, [
+        "--bind",
+        "--host",
+        "--hostname",
+        "--listen",
+        "--address",
+      ])) {
+        if (!isLoopbackValue(v)) {
+          return block(
+            "loopback-only",
+            `Bind/host value ${v} is not a loopback address; use 127.0.0.1, ::1 or localhost (rail 3).`,
+          );
+        }
+      }
+      for (const v of flagValues(seg, ["--preview-domain"])) {
+        const d = v.replace(/^["']|["']$/g, "");
+        if (d !== "localhost" && !d.endsWith(".localhost")) {
+          return block(
+            "loopback-only",
+            "--preview-domain must be localhost or end in .localhost (rail 3).",
+          );
+        }
       }
     }
-    if (
-      word === "docker" &&
-      /\brun\b/.test(seg) &&
-      /(?:-p|--publish)[=\s]+(?!127\.0\.0\.1:|\[::1\]:)\d+:\d+/.test(seg)
-    ) {
-      return block("loopback-only", "Published ports must be prefixed with 127.0.0.1: (rail 3).");
+    if (word === "docker" || word === "docker-compose") {
+      if (/(?:^|\s)(?:-P|--publish-all)\b/.test(seg)) {
+        return block(
+          "loopback-only",
+          "Publishing all ports binds every interface; publish explicit 127.0.0.1: ports (rail 3).",
+        );
+      }
+      for (const v of [
+        ...flagValues(seg, ["--publish"]),
+        ...[...seg.matchAll(/(?:^|\s)-p\s*(\S+)/g)].map((m) => m[1]),
+      ]) {
+        if (!/^["']?(?:127\.0\.0\.1|\[::1\]):/.test(v)) {
+          return block(
+            "loopback-only",
+            `Published port ${v} must start with 127.0.0.1: or [::1]: (rail 3).`,
+          );
+        }
+      }
     }
   }
 

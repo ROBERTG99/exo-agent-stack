@@ -116,6 +116,8 @@ describe(".claude/settings.json", () => {
       "Bash(node:*)",
       "Bash(pnpm:*)",
       "Bash(pnpm exec:*)",
+      "Bash(pnpm exec tsx scripts/:*)",
+      "Bash(pnpm --filter:*)",
       "Bash(uv:*)",
       "Bash(make:*)",
       "Bash(docker compose:*)",

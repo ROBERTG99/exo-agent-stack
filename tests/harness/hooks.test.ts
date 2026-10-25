@@ -87,6 +87,29 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     ["rm -rf vendor/exo/crates", "vendor-readonly"],
     ["cp ./x vendor/exo/x", "vendor-readonly"],
     ["echo x >> evals/datasets/durability.v1.test.jsonl", "immutable-dataset"],
+    // destructive pushes beyond --force
+    ["git push --delete origin old", "no-force-push"],
+    ["git push -d origin old", "no-force-push"],
+    ["git push origin :old-branch", "no-force-push"],
+    ["git push --mirror", "no-force-push"],
+    ["git push --prune origin", "no-force-push"],
+    ["git push -fu origin main", "no-force-push"],
+    // shell indirection
+    ["bash -c 'claude setup-token'", "no-signin"],
+    ['sh -c "git push --force"', "no-force-push"],
+    ['eval "make live-claude"', "no-live-calls"],
+    ["echo $(claude login)", "no-signin"],
+    ["echo `gh auth login`", "no-signin"],
+    ["echo x | xargs claude login", "no-signin"],
+    ["timeout 5 claude setup-token", "no-signin"],
+    // loopback allowlists
+    ["exo run --serve --bind 10.0.0.5:9810", "loopback-only"],
+    ["node server.js --host example.com", "loopback-only"],
+    ["exo run --serve --preview-domain evil.example", "loopback-only"],
+    ["docker run -p 9800 img", "loopback-only"],
+    ["docker run -P img", "loopback-only"],
+    ["docker run --publish 8080:80 img", "loopback-only"],
+    ["docker run -p 0.0.0.0:9800:9800 img", "loopback-only"],
   ])("blocks %j (%s)", (command, rule) => {
     const r = bash(command);
     expect(r.status, r.stderr).toBe(2);
@@ -116,6 +139,16 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     "make doctor",
     "cat evals/datasets/durability.v1.test.jsonl",
     "git commit -m 'feat: add credit guard'",
+    "git push origin HEAD:refs/heads/feature-x",
+    "git push -u origin feature-x",
+    "exo run --serve --bind [::1]:9810",
+    "exo run --serve --bind localhost:9810",
+    "exo run --serve --preview-domain app.localhost",
+    "docker run --publish 127.0.0.1:8080:80 img",
+    "docker run -p [::1]:9800:9800 img",
+    "bash -c 'make check-fast'",
+    "echo $(date +%s)",
+    "echo x | xargs echo",
   ])("allows %j", (command) => {
     const r = bash(command);
     expect(r.status, r.stderr).toBe(0);

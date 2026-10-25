@@ -57,8 +57,6 @@
       "Bash(pnpm exec tsc:*)",
       "Bash(pnpm exec markdownlint-cli2:*)",
       "Bash(pnpm exec playwright test:*)",
-      "Bash(pnpm exec tsx scripts/:*)",
-      "Bash(pnpm --filter:*)",
       "Bash(uv sync)",
       "Bash(uv run evalgate:*)",
       "Bash(cargo build:*)",
