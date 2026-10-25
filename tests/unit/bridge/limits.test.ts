@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeContext } from "../../../bridge/src/context.ts";
 import {
   LIMITS,
   RateLimiter,
@@ -99,5 +100,18 @@ describe("parseHostHeader", () => {
     expect(parseHostHeader(undefined)).toBeNull();
     expect(parseHostHeader("")).toBeNull();
     expect(parseHostHeader("a b")).toBeNull();
+  });
+});
+
+describe("makeContext", () => {
+  it("only talks to a local stackd, so the token never leaves the machine", () => {
+    for (const url of ["http://127.0.0.1:9812", "http://localhost:9812/", "http://stackd:9812"]) {
+      expect(() => makeContext({ stackdUrl: url, stackdToken: "t".repeat(40) }), url).not.toThrow();
+    }
+    for (const url of ["https://stackd.evil.example", "http://203.0.113.5:9812", "nonsense"]) {
+      expect(() => makeContext({ stackdUrl: url, stackdToken: "t".repeat(40) }), url).toThrow(
+        /local/,
+      );
+    }
   });
 });

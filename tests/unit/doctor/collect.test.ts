@@ -331,3 +331,94 @@ describe("collectSnapshot asks stackd", () => {
     expect(down.unavailable?.["D-22"]).toBe("stackd is not reachable");
   });
 });
+
+describe("collectSnapshot does not send the token off the machine", () => {
+  it("skips the stackd checks, without calling it, when EXOS_STACKD_URL is not a local address", async () => {
+    const root = tempRoot();
+    const state = join(root, "state");
+    mkdirSync(state, { mode: 0o700 });
+    writeFileSync(join(state, "local-token"), "t".repeat(64), { mode: 0o600 });
+    let calls = 0;
+    const snap = await collectSnapshot({
+      root,
+      env: { EXOS_STATE_DIR: state, EXOS_STACKD_URL: "https://stackd.evil.example" },
+      run: noSystem,
+      fetchImpl: (async () => {
+        calls++;
+        return new Response("{}");
+      }) as typeof fetch,
+    });
+    expect(calls).toBe(0);
+    expect(snap.unavailable?.["D-16"]).toMatch(/not a local address/);
+    expect(snap.unavailable?.["D-22"]).toMatch(/not a local address/);
+  });
+
+  it("accepts a local service name such as the compose service stackd", async () => {
+    const root = tempRoot();
+    const state = join(root, "state");
+    mkdirSync(state, { mode: 0o700 });
+    writeFileSync(join(state, "local-token"), "t".repeat(64), { mode: 0o600 });
+    const urls: string[] = [];
+    await collectSnapshot({
+      root,
+      env: { EXOS_STATE_DIR: state, EXOS_STACKD_URL: "http://stackd:9812" },
+      run: noSystem,
+      fetchImpl: (async (url: string | URL) => {
+        urls.push(String(url));
+        return new Response("{}");
+      }) as typeof fetch,
+    });
+    expect(urls[0]).toBe("http://stackd:9812/api/v1/usage");
+  });
+});
+
+describe("collectSnapshot reads MCP write policy from the tool policies", () => {
+  const withAgent = (front: string): string => {
+    const root = tempRoot();
+    writeFileSync(
+      join(root, "agents", "zz-test.md"),
+      `---\nname: zz-test\ndescription: test\nharness: ../harnesses/claude-host/harness.ts\nmodel:\n  name: claude-haiku-5-5\n${front}---\n\nbody\n`,
+    );
+    return root;
+  };
+  const policyOf = async (front: string, name = "srv") => {
+    const root = withAgent(front);
+    const snap = await collectSnapshot({
+      root,
+      env: { EXOS_STATE_DIR: join(root, "state") },
+      run: noSystem,
+    });
+    return snap.mcp_servers.find((m) => m.agent === "zz-test" && m.name === name)!;
+  };
+  const server = (extra: string) =>
+    `mcp_servers:\n  - type: url\n    name: srv\n    url: http://127.0.0.1:9999/mcp\n${extra}`;
+
+  it("treats a server that asks by default as asking for writes", async () => {
+    expect(
+      (await policyOf(server("    permission_policy:\n      type: always_ask\n")))
+        .write_tools_policy,
+    ).toBe("always_ask");
+  });
+
+  it("does not, when one tool is always_allow", async () => {
+    const front = server(
+      "    permission_policy:\n      type: always_ask\n    tool_policies:\n      write_file:\n        type: always_allow\n",
+    );
+    expect((await policyOf(front)).write_tools_policy).toBe("always_allow");
+  });
+
+  it("lets a known read-only browser tool be always_allow on the playwright server", async () => {
+    const front = `mcp_servers:\n  - type: url\n    name: playwright\n    url: http://127.0.0.1:9843/mcp\n    permission_policy:\n      type: always_ask\n    tool_policies:\n      browser_snapshot:\n        type: always_allow\n`;
+    expect((await policyOf(front, "playwright")).write_tools_policy).toBe("always_ask");
+    const bad = front + "      browser_click:\n        type: always_allow\n";
+    expect((await policyOf(bad, "playwright")).write_tools_policy).toBe("always_allow");
+  });
+
+  it("treats a missing permission policy as permissive, and an always_allow server as permissive", async () => {
+    expect((await policyOf(server(""))).write_tools_policy).toBe("always_allow");
+    expect(
+      (await policyOf(server("    permission_policy:\n      type: always_allow\n")))
+        .write_tools_policy,
+    ).toBe("always_allow");
+  });
+});

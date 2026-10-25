@@ -7,7 +7,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
-import { stackSnapshotSchema, type StackSnapshot } from "@exos/common";
+import { isLocalServiceUrl, stackSnapshotSchema, type StackSnapshot } from "@exos/common";
 import { buildSettings } from "@exos/claude-host/settings";
 import { agentFiles, parseAgentText } from "./agent-schema.ts";
 import { loadAllowlists, loadEnvironments, snapshotEnvironments } from "./environments.ts";
@@ -58,6 +58,38 @@ const SERVICE_PORTS: Record<number, string> = {
 
 /** Public MCP servers known to offer read tools only (their write policy cannot be read from the definition). */
 const READ_ONLY_MCP_URLS = new Set(["https://mcp.deepwiki.com/mcp"]);
+
+/** Tools of a known server that only read; an always_allow override on one of these is fine. */
+const READ_ONLY_TOOLS: Record<string, Set<string>> = {
+  playwright: new Set([
+    "browser_snapshot",
+    "browser_take_screenshot",
+    "browser_console_messages",
+    "browser_network_requests",
+  ]),
+};
+
+/**
+ * Whether the server's write tools ask. Its definition does not list which tools write, so this errs
+ * towards "allow": the server must ask by default, and no tool may be allowed without asking unless it
+ * is a known read-only tool of that server. A missing default counts as permissive.
+ */
+function writeToolsPolicy(
+  name: string,
+  url: string,
+  policy: string,
+  toolPolicies: unknown,
+): "always_allow" | "always_ask" {
+  if (READ_ONLY_MCP_URLS.has(url)) return "always_ask";
+  if (policy !== "always_ask") return "always_allow";
+  const readOnly = READ_ONLY_TOOLS[name] ?? new Set<string>();
+  for (const [tool, p] of Object.entries(
+    (toolPolicies as Record<string, { type?: string }> | undefined) ?? {},
+  )) {
+    if (p?.type === "always_allow" && !readOnly.has(tool)) return "always_allow";
+  }
+  return "always_ask";
+}
 
 const octal = (mode: number) => (mode & 0o777).toString(8).padStart(4, "0");
 const exists = (p: string) => existsSync(p);
@@ -141,16 +173,16 @@ function agentFacts(root: string, environments: StackSnapshot["environments"]) {
       }
       for (const server of (front.mcp_servers as Array<Record<string, unknown>> | undefined) ??
         []) {
-        const policy = ((server.permission_policy as { type?: string } | undefined)?.type ??
-          "always_ask") as "always_allow" | "always_ask";
+        const name = String(server.name ?? "");
         const url = String(server.url ?? "");
+        const policy = ((server.permission_policy as { type?: string } | undefined)?.type ??
+          "always_allow") as "always_allow" | "always_ask";
         mcp.push({
           agent: slug,
-          name: String(server.name ?? ""),
+          name,
           url,
           permission_policy: policy,
-          write_tools_policy:
-            policy === "always_ask" || READ_ONLY_MCP_URLS.has(url) ? "always_ask" : "always_allow",
+          write_tools_policy: writeToolsPolicy(name, url, policy, server.tool_policies),
           has_credential: typeof server.credential === "string" || typeof server.vault === "string",
         });
       }
@@ -286,8 +318,10 @@ export async function collectSnapshot(o: CollectOptions): Promise<StackSnapshot>
   let lag = 0;
   let dashboardOnly: string[] = [];
   const token = exists(tokenFile) ? readText(tokenFile).trim() : "";
+  const stackdIsLocal = isLocalServiceUrl(stackdUrl);
   const getJson = async (p: string): Promise<Record<string, unknown> | undefined> => {
-    if (!token) return undefined;
+    // The API token goes with the request: never to an address that is not local.
+    if (!token || !stackdIsLocal) return undefined;
     try {
       const res = await doFetch(`${stackdUrl}${p}`, {
         headers: { authorization: `Bearer ${token}` },
@@ -300,14 +334,21 @@ export async function collectSnapshot(o: CollectOptions): Promise<StackSnapshot>
   };
   const usage = await getJson("/api/v1/usage");
   if (typeof usage?.meter_lag_s === "number") lag = usage.meter_lag_s;
-  else
-    unavailable["D-16"] = usage
-      ? "the meter has not completed a pass yet"
-      : "stackd is not reachable";
+  else {
+    unavailable["D-16"] = !stackdIsLocal
+      ? "EXOS_STACKD_URL is not a local address, so the token is not sent"
+      : usage
+        ? "the meter has not completed a pass yet"
+        : "stackd is not reachable";
+  }
   const approvals = await getJson("/api/v1/approvals");
   if (Array.isArray(approvals?.dashboard_only_tools))
     dashboardOnly = approvals.dashboard_only_tools.map(String);
-  else unavailable["D-22"] = "stackd is not reachable";
+  else {
+    unavailable["D-22"] = !stackdIsLocal
+      ? "EXOS_STACKD_URL is not a local address, so the token is not sent"
+      : "stackd is not reachable";
+  }
 
   // --- files and permissions -------------------------------------------------------------------
   let tokenMode = "0600";

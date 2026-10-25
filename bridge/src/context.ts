@@ -1,4 +1,5 @@
 // What every bridge tool needs: where stackd is, how to authenticate to it, and the call limiter.
+import { isLocalServiceUrl } from "@exos/common";
 import { RateLimiter } from "./limits.ts";
 
 export interface BridgeContext {
@@ -18,6 +19,12 @@ export function makeContext(opts: {
   fetchImpl?: typeof fetch;
   dashboardUrl?: string;
 }): BridgeContext {
+  // The bearer token goes with every request, so it may only go to a local stackd.
+  if (!isLocalServiceUrl(opts.stackdUrl)) {
+    throw new Error(
+      "EXOS_STACKD_URL must name a local stackd (a loopback address or a compose service name)",
+    );
+  }
   return {
     stackdUrl: opts.stackdUrl.replace(/\/+$/, ""),
     stackdToken: opts.stackdToken,
