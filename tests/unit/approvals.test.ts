@@ -73,17 +73,26 @@ describe("dashboard-only matching", () => {
     }
   });
 
-  it("matches a phrase as a word: `ssh` is not `-c gpg.ssh.program=false`, but still `/usr/bin/ssh host`", () => {
+  it("matches a phrase anywhere, except as a segment of a dotted key: `-c gpg.ssh.program=false` is not `ssh`", () => {
     for (const c of ["ssh host", "/usr/bin/ssh host", "cd x && ssh host", "echo a; ssh -p 22 h"]) {
       expect(bash(c), c).toBe(true);
     }
-    for (const c of ["git -c gpg.ssh.program=false log", "echo a.ssh=b", "ls sshd"]) {
+    for (const c of ["git -c gpg.ssh.program=false log", "echo a.ssh.b"]) {
       // a tool that is not Bash, so only the phrase matcher decides
       expect(isDashboardOnly(parseDashboardOnly(["*(ssh)"]), "mcp.run", { command: c }), c).toBe(
         false,
       );
     }
-    for (const c of ["ssh host", "run ssh -p 22 h", "/usr/bin/ssh h"]) {
+    for (const c of [
+      "ssh host",
+      "run ssh -p 22 h",
+      "/usr/bin/ssh h",
+      "ls sshd",
+      "x --tool=ssh",
+      "FOO=ssh",
+      "ssh.exe h",
+      "a-ssh h",
+    ]) {
       expect(isDashboardOnly(parseDashboardOnly(["*(ssh)"]), "mcp.run", { command: c }), c).toBe(
         true,
       );

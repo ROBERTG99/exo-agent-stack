@@ -88,13 +88,11 @@ interface Matcher {
 const glob = (g: string): string => g.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
 
 /**
- * A phrase matches as a word where it begins or ends with a word character: `ssh` is `ssh host` and
- * `/usr/bin/ssh host` but not the key in `-c gpg.ssh.program=false`.
+ * A phrase is searched anywhere, so a false positive only sends a call to the dashboard. The one
+ * exception is a segment of a dotted key: `ssh` is not the `ssh` in `-c gpg.ssh.program=false`
+ * (a phrase with a dot on both sides), which the pins that make a git command approvable contain.
  */
-const phrase = (p: string): RegExp =>
-  new RegExp(
-    `${/^\w/.test(p) ? "(?<![\\w.=-])" : ""}${glob(p)}${/\w$/.test(p) ? "(?![\\w.=-])" : ""}`,
-  );
+const phrase = (p: string): RegExp => new RegExp(`(?:(?<!\\.)${glob(p)}|${glob(p)}(?!\\.))`);
 
 /**
  * `tool` or `tool(phrase)`. The tool name is a whole-name glob; the phrase is searched anywhere in
