@@ -420,13 +420,15 @@ function findIsSafe(args: string[], globs: boolean[]): boolean {
   return true;
 }
 
-// Subcommands that only read. git also runs programs named in the repository's own config
-// (`core.fsmonitor`, `diff.external`, textconv filters), and an agent may have written that file, so
-// a command is only provably safe when it switches those off itself: `-c core.fsmonitor=false` always,
-// and `--no-ext-diff --no-textconv` where a diff is made. (`blame`, `shortlog` and `describe` are left
-// to the dashboard rather than vouching for their textconv and index-refresh paths.)
-const GIT_READ_ONLY = new Set(["status", "diff", "log", "show", "rev-parse", "ls-files"]);
-const GIT_DIFFS = new Set(["diff", "log", "show"]);
+// git runs programs named in the repository's own config (signature checking through `gpg.program`,
+// clean and textconv filters, `diff.external`, the file system monitor), and an agent may have written
+// that file. So only commands that read objects and refs are vouched for (`status` and `diff` of the
+// work tree run clean filters and the monitor; `blame`, `shortlog`, `describe` and `ls-files` are left
+// to the dashboard), and each has to switch the rest off itself: `--no-pager` and `-c
+// log.showSignature=false` before the subcommand, and `--no-ext-diff --no-textconv` for `log` and
+// `show`. A `-c` on the command line outranks every config file.
+const GIT_READ_ONLY = new Set(["log", "show", "rev-parse"]);
+const GIT_DIFFS = new Set(["log", "show"]);
 /** Options that write a file, run a program or point git somewhere else (long ones, whole). */
 const GIT_FORBIDDEN_LONG = [
   "--output",
@@ -440,19 +442,23 @@ const GIT_FORBIDDEN_LONG = [
   "--upload-pack",
   "--receive-pack",
   "--contents",
+  "--show-signature",
 ];
 
 function gitIsSafe(args: string[], globs: boolean[]): boolean {
   let k = 0;
-  let fsmonitorOff = false;
+  let noPager = false;
+  let signatureOff = false;
   for (;;) {
-    if (args[k] === "--no-pager") k += 1;
-    else if (args[k] === "-c" && args[k + 1] === "core.fsmonitor=false") {
-      fsmonitorOff = true;
+    if (args[k] === "--no-pager") {
+      noPager = true;
+      k += 1;
+    } else if (args[k] === "-c" && args[k + 1] === "log.showSignature=false") {
+      signatureOff = true;
       k += 2;
     } else break;
   }
-  if (!fsmonitorOff || globs.slice(0, k + 1).some(Boolean)) return false;
+  if (!noPager || !signatureOff || globs.slice(0, k + 1).some(Boolean)) return false;
   const sub = args[k++];
   if (sub === undefined || !GIT_READ_ONLY.has(sub)) return false;
   const needed = new Set(GIT_DIFFS.has(sub) ? ["--no-ext-diff", "--no-textconv"] : []);

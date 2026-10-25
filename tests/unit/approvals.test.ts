@@ -76,14 +76,14 @@ describe("dashboard-only matching", () => {
   it("lets plainly harmless commands through, and sends everything it cannot vouch for to the dashboard", () => {
     for (const c of [
       "ls -la",
-      "git -c core.fsmonitor=false status",
-      "git -c core.fsmonitor=false diff --no-ext-diff --no-textconv --stat",
+      "git --no-pager -c log.showSignature=false log --no-ext-diff --no-textconv --oneline",
       "cat README.md",
     ]) {
       expect(bash(c), c).toBe(false);
     }
     for (const c of [
       "git commit -m x",
+      "git status",
       "pnpm test",
       "make check-fast",
       "echo x > Makefile",
