@@ -6,6 +6,7 @@ import type { ExoClient, ExoEvent } from "@exos/exo-client";
 import { canonicalJson } from "@exos/common";
 import type { AgentDirectory } from "./agents.ts";
 import type { Db } from "./db/index.ts";
+import { isProvablySafeBash } from "./shell-safety.ts";
 import { listThreads } from "./threads.ts";
 
 export type Decision =
@@ -113,9 +114,20 @@ function subjectOf(args: unknown): string {
     .join("\n");
 }
 
+/**
+ * Whether only a person in the dashboard may approve this call: the tool matches an explicit
+ * pattern, or it is a shell command that is not provably simple and local (shell-safety.ts), which
+ * includes a missing or unreadable command. A shell call can therefore only be settled by the bridge
+ * when it is plainly harmless.
+ */
 export function isDashboardOnly(matchers: Matcher[], tool: string, args: unknown): boolean {
   const subject = subjectOf(args);
-  return matchers.some((m) => m.tool.test(tool) && (!m.args || m.args.test(subject)));
+  if (matchers.some((m) => m.tool.test(tool) && (!m.args || m.args.test(subject)))) return true;
+  if (/(^|\.)bash$/i.test(tool)) {
+    const command = (args as { command?: unknown } | null | undefined)?.command;
+    return typeof command !== "string" || !isProvablySafeBash(command);
+  }
+  return false;
 }
 
 export function loadDashboardOnly(env: NodeJS.ProcessEnv): string[] {

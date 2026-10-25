@@ -2,10 +2,14 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 
-/** Creates (or reads) the local access token at <stateDir>/local-token with mode 0600. */
-export function ensureLocalToken(stateDir: string): string {
+/**
+ * Creates (or reads) a random access token at <stateDir>/<name> with mode 0600. `local-token` is
+ * what the bridge and the CLI present; `dashboard-token` only signs a person into the dashboard and
+ * is never given to the bridge or to an agent.
+ */
+export function ensureLocalToken(stateDir: string, name = "local-token"): string {
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const file = join(stateDir, "local-token");
+  const file = join(stateDir, name);
   if (existsSync(file)) {
     chmodSync(file, 0o600);
     const existing = readFileSync(file, "utf8").trim();
@@ -24,3 +28,6 @@ export function tokenMatches(expected: string, presented: string | undefined): b
   const b = Buffer.from(presented);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+export const ensureDashboardToken = (stateDir: string): string =>
+  ensureLocalToken(stateDir, "dashboard-token");

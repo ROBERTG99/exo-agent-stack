@@ -73,17 +73,32 @@ describe("dashboard-only matching", () => {
     }
   });
 
-  it("lets ordinary commands through", () => {
-    for (const c of ["ls -la", "git status", "git commit -m x", "pnpm test", "npm install"]) {
+  it("lets plainly harmless commands through, and sends everything it cannot vouch for to the dashboard", () => {
+    for (const c of ["ls -la", "git status", "git commit -m x", "pnpm test", "make check-fast"]) {
       expect(bash(c), c).toBe(false);
     }
+    for (const c of [
+      "npm install",
+      "git -c core.sshCommand=x push",
+      "/usr/bin/git  push",
+      "python3 -c 'import socket'",
+      "echo $(id)",
+    ]) {
+      expect(bash(c), c).toBe(true);
+    }
+  });
+
+  it("treats a shell call with no readable command as dashboard-only", () => {
+    expect(isDashboardOnly([], "claude.Bash", undefined)).toBe(true);
+    expect(isDashboardOnly([], "claude.Bash", { command: 5 })).toBe(true);
+    expect(isDashboardOnly([], "Bash", { command: "rm -rf build" })).toBe(true);
+    expect(isDashboardOnly([], "claude.Bash", { command: "ls" })).toBe(false);
   });
 
   it("matches network tools by name and ignores other tools", () => {
     expect(isDashboardOnly(m, "claude.WebFetch", { url: "https://example.org" })).toBe(true);
     expect(isDashboardOnly(m, "claude.WebSearch", {})).toBe(true);
     expect(isDashboardOnly(m, "claude.Edit", { file_path: "a.ts" })).toBe(false);
-    expect(isDashboardOnly(m, "claude.Bash", undefined)).toBe(false);
   });
 
   it("supports a whole-name glob and escapes regex characters", () => {

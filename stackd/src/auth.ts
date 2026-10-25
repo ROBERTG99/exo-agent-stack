@@ -1,7 +1,9 @@
 // Who is calling (BUILD.md §4.6): the bridge and the CLI present the local token as a bearer; the
-// dashboard holds the `exos_session` cookie that `GET /login?t=<token>` sets. The two are told
-// apart because some decisions (`dashboard_only` tools) may only be taken by a person in the
-// dashboard. The cookie value is derived from the token, so it changes when the token does.
+// dashboard holds the `exos_session` cookie that `GET /login?t=<dashboard token>` sets. The two are
+// told apart because some decisions (`dashboard_only` tools) may only be taken by a person in the
+// dashboard, so the dashboard token is a different secret from the API token: whoever holds only
+// the API token (the bridge, an agent's tooling) cannot mint a session. The cookie value is derived
+// from the dashboard token and changes when it does.
 import { createHmac } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { tokenMatches } from "./token.ts";
@@ -32,10 +34,19 @@ function cookieOf(header: string | undefined, name: string): string | undefined 
   return undefined;
 }
 
-/** The caller's role, or null. A valid bearer wins over a cookie. */
-export function authenticate(token: string, request: FastifyRequest): Actor | null {
+export interface Tokens {
+  /** Presented as a bearer by the bridge and the CLI. */
+  api: string;
+  /** Only signs a person into the dashboard (`/login`); never a bearer. */
+  dashboard: string;
+}
+
+/** The caller's role, or null. A presented bearer is judged on its own, cookie or not. */
+export function authenticate(tokens: Tokens, request: FastifyRequest): Actor | null {
   const bearer = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (bearer !== undefined) return tokenMatches(token, bearer) ? "api" : null;
+  if (bearer !== undefined) return tokenMatches(tokens.api, bearer) ? "api" : null;
   const cookie = cookieOf(request.headers.cookie, SESSION_COOKIE);
-  return cookie !== undefined && tokenMatches(sessionValue(token), cookie) ? "dashboard" : null;
+  return cookie !== undefined && tokenMatches(sessionValue(tokens.dashboard), cookie)
+    ? "dashboard"
+    : null;
 }

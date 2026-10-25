@@ -23,7 +23,7 @@ import { registerApprovalRoutes } from "./routes/approvals.ts";
 import { registerCreditRoutes } from "./routes/credit.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerThreadRoutes } from "./routes/threads.ts";
-import { ensureLocalToken, tokenMatches } from "./token.ts";
+import { ensureDashboardToken, ensureLocalToken, tokenMatches } from "./token.ts";
 import { WorktreeManager } from "./worktrees.ts";
 
 export interface StackdOptions {
@@ -72,6 +72,8 @@ function parseHostHeader(
 export interface Stackd {
   app: FastifyInstance;
   token: string;
+  /** Signs a person into the dashboard; keep it away from the bridge and from agents. */
+  dashboardToken: string;
   db: Db;
   meter: Meter;
   credit: CreditGuard;
@@ -83,6 +85,7 @@ export interface Stackd {
 
 export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   const token = ensureLocalToken(opts.stateDir);
+  const dashboardToken = ensureDashboardToken(opts.stateDir);
   const dashboardPort = opts.dashboardPort ?? 9800;
   const clock = opts.clock ?? (() => new Date());
   const db = openDatabase(path.join(opts.stateDir, "stack.db"));
@@ -176,7 +179,7 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
 
   app.decorateRequest("actor", null);
   const requireToken = async (request: FastifyRequest, reply: FastifyReply) => {
-    request.actor = authenticate(token, request);
+    request.actor = authenticate({ api: token, dashboard: dashboardToken }, request);
     if (!request.actor) {
       return problem(
         reply,
@@ -191,11 +194,17 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   // The dashboard signs in once with the local token and then holds a session cookie.
   app.get("/login", async (request, reply) => {
     const presented = (request.query as { t?: string }).t;
-    if (!tokenMatches(token, presented)) {
-      return problem(reply, 401, "unauthorized", "Unauthorized", "A valid local token is required");
+    if (!tokenMatches(dashboardToken, presented)) {
+      return problem(
+        reply,
+        401,
+        "unauthorized",
+        "Unauthorized",
+        "A valid dashboard token is required",
+      );
     }
     return reply
-      .header("set-cookie", setCookieHeader(token))
+      .header("set-cookie", setCookieHeader(dashboardToken))
       .header("cache-control", "no-store")
       .header("referrer-policy", "no-referrer")
       .redirect(`${ctx.dashboardUrl}/`, 302);
@@ -230,7 +239,17 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     meter.stop();
     db.close();
   });
-  return { app, token, db, meter, credit, approvals, ctx, close: () => app.close() };
+  return {
+    app,
+    token,
+    dashboardToken,
+    db,
+    meter,
+    credit,
+    approvals,
+    ctx,
+    close: () => app.close(),
+  };
 }
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<FastifyInstance> {

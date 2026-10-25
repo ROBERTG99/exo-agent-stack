@@ -28,7 +28,7 @@ async function startThread(s: Stack, prompt: string) {
 
 /** A call as the dashboard makes it: with the session cookie from /login, not the bearer token. */
 async function dashboard(s: Stack) {
-  const login = await fetch(`${s.url}/login?t=${s.token}`, { redirect: "manual" });
+  const login = await fetch(`${s.url}/login?t=${s.stackd.dashboardToken}`, { redirect: "manual" });
   const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
   return async (method: string, path: string, body?: unknown) => {
     const res = await fetch(`${s.url}${path}`, {
@@ -350,12 +350,15 @@ describe("questions for the human", () => {
 });
 
 describe("sessions", () => {
-  it("signs the dashboard in with the token, as an HttpOnly SameSite=Strict cookie", async () => {
+  it("signs the dashboard in with its own token, as an HttpOnly SameSite=Strict cookie", async () => {
     const s = await stack();
-    const login = await fetch(`${s.url}/login?t=${s.token}`, { redirect: "manual" });
+    const login = await fetch(`${s.url}/login?t=${s.stackd.dashboardToken}`, {
+      redirect: "manual",
+    });
     expect(login.status).toBe(302);
     const cookie = login.headers.get("set-cookie")!;
     expect(cookie).toMatch(/^exos_session=[0-9a-f]{64}; HttpOnly; SameSite=Strict; Path=\/$/);
+    expect(cookie).not.toContain(s.stackd.dashboardToken);
     expect(cookie).not.toContain(s.token);
     expect(login.headers.get("location")).toContain("127.0.0.1:9800");
     expect(login.headers.get("cache-control")).toBe("no-store");
@@ -363,6 +366,27 @@ describe("sessions", () => {
       headers: { cookie: cookie.split(";")[0]! },
     });
     expect(ok.status).toBe(200);
+  });
+
+  it("does not let the API token (the bridge's) mint a dashboard session", async () => {
+    const s = await stack();
+    expect(s.stackd.dashboardToken).not.toBe(s.token);
+    const attempt = await fetch(`${s.url}/login?t=${s.token}`, { redirect: "manual" });
+    expect(attempt.status).toBe(401);
+    expect(attempt.headers.get("set-cookie")).toBeNull();
+    // and the dashboard token is not a bearer
+    const asBearer = await fetch(`${s.url}/api/v1/approvals`, {
+      headers: { authorization: `Bearer ${s.stackd.dashboardToken}` },
+    });
+    expect(asBearer.status).toBe(401);
+  });
+
+  it("keeps the two tokens in separate owner-only files", async () => {
+    const s = await stack();
+    const { statSync } = await import("node:fs");
+    for (const f of ["local-token", "dashboard-token"]) {
+      expect(statSync(`${s.stateDir}/${f}`).mode & 0o777, f).toBe(0o600);
+    }
   });
 
   it("refuses a wrong login token, a forged cookie and a wrong bearer", async () => {
@@ -375,7 +399,9 @@ describe("sessions", () => {
       headers: { cookie: `exos_session=${"a".repeat(64)}` },
     });
     expect(forged.status).toBe(401);
-    const login = await fetch(`${s.url}/login?t=${s.token}`, { redirect: "manual" });
+    const login = await fetch(`${s.url}/login?t=${s.stackd.dashboardToken}`, {
+      redirect: "manual",
+    });
     const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
     const bad = await fetch(`${s.url}/api/v1/approvals`, {
       headers: { authorization: "Bearer nope", cookie },
