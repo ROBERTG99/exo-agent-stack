@@ -1,0 +1,10 @@
+# Mode A: a local process on the maintainer's machine. It sees only the thread's own git worktree
+# ({{worktree}} is replaced by stackd) and uses the machine's network; isolation comes from the
+# worktree, the deny list, the path guard and approvals (docs/modes.md).
+name: host-a
+provider: local_process
+network:
+  mode: host
+mounts:
+  - "{{worktree}}"
+vault_backed_agents: forbidden

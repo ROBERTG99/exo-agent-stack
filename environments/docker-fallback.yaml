@@ -1,0 +1,11 @@
+# Sandbox for Linux hosts without KVM. Vault-backed agents (Mode B) cannot run here because the
+# egress credential substitution needs SmolVM or Firecracker.
+name: docker-fallback
+provider: docker
+network:
+  mode: limited
+  allowed_tcp_ports: [443]
+  allowed_hosts_from: allowlists.yaml
+mounts:
+  - /workspace
+vault_backed_agents: forbidden

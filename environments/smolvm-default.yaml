@@ -1,0 +1,15 @@
+# Default sandbox for agents that run untrusted code or hold a vault-backed credential (Mode B).
+# SmolVM needs hardware virtualisation; doctor reports Mode B as unsupported where it is missing.
+name: smolvm-default
+provider: smolvm
+resources:
+  vcpus: 2
+  memory_mib: 4096
+  idle_seconds: 900
+network:
+  mode: limited
+  allowed_tcp_ports: [443]
+  allowed_hosts_from: allowlists.yaml
+mounts:
+  - /workspace
+vault_backed_agents: allowed

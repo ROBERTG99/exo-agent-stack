@@ -1,0 +1,8 @@
+# For tests and CI: a local process running the scripted harness against the fake model. No
+# mounts and no network.
+name: ci-local
+provider: local_process
+network:
+  mode: none
+mounts: []
+vault_backed_agents: forbidden

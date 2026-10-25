@@ -1,0 +1,17 @@
+# Hosts a sandboxed agent may reach on port 443, per agent (BUILD.md §4.5). Plain lowercase DNS
+# names only. Doctor D-10 checks that no environment allows a host that is not listed here.
+repo-builder-b:
+  - api.anthropic.com
+  - github.com
+  - api.github.com
+  - registry.npmjs.org
+  - pypi.org
+  - files.pythonhosted.org
+
+# UNVERIFIED and therefore empty: the Cursor SDK hosts are read from the pinned
+# exoharness/typescript/cursor/sdk.ts (verification item V-15). Until then this agent has no
+# network in a sandbox. Nothing is guessed here.
+reviewer-cursor: []
+
+researcher-b:
+  - api.anthropic.com
