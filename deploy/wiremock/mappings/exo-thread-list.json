@@ -1,0 +1,19 @@
+{
+  "name": "exo-thread-list (generated from fixtures/exo-recordings/exo-sim; do not edit)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent/agt_5/thread",
+    "queryParameters": {
+      "limit": {
+        "equalTo": "10"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"threads\":[{\"id\":\"thr_1\",\"slug\":\"recording-a\",\"name\":null,\"agent_id\":\"agt_5\",\"environment\":null,\"harness\":null}],\"next_cursor\":null}"
+  }
+}

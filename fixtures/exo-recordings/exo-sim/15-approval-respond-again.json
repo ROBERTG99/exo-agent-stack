@@ -1,0 +1,23 @@
+{
+  "name": "approval-respond-again",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_1/turn/trn_1/approval-response",
+    "body": {
+      "session_id": "ses_1",
+      "approval_id": "apr_1",
+      "approved": false,
+      "allow_for_tool": false
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "already_decided",
+        "message": "the approval was already decided"
+      }
+    }
+  }
+}

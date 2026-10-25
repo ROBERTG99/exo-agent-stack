@@ -304,12 +304,12 @@ describe("service entrypoints honour the loopback-only rail", () => {
 });
 
 describe("skeleton deployment files", () => {
-  it("WireMock mapping serves GET /exo/agent and is marked as a placeholder", () => {
+  it("WireMock mapping serves GET /exo/agent and says it is generated from the simulator recording", () => {
     const file = join(root, "deploy/wiremock/mappings/exo-agent-list.json");
     const mapping = JSON.parse(readFileSync(file, "utf8"));
     expect(mapping.request).toMatchObject({ method: "GET", urlPath: "/exo/agent" });
     expect(mapping.response.status).toBe(200);
-    expect(mapping.name).toMatch(/placeholder/i);
+    expect(mapping.name).toMatch(/generated from fixtures\/exo-recordings\/exo-sim/);
     const body = JSON.parse(mapping.response.body);
     expect(body.agents.length).toBeGreaterThanOrEqual(2);
   });

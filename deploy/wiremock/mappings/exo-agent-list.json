@@ -1,5 +1,5 @@
 {
-  "name": "exo-agent-list (placeholder: hand-written until T-08 records it from a real Exo)",
+  "name": "exo-agent-list (generated from fixtures/exo-recordings/exo-sim; do not edit)",
   "request": {
     "method": "GET",
     "urlPath": "/exo/agent"
@@ -9,6 +9,6 @@
     "headers": {
       "Content-Type": "application/json"
     },
-    "body": "{\"agents\": [{\"id\": \"agent-1\", \"slug\": \"repo-builder\", \"name\": \"repo-builder\", \"harness\": \"claude-host\"}, {\"id\": \"agent-2\", \"slug\": \"repo-builder-b\", \"name\": \"repo-builder-b\", \"harness\": \"claude-sandboxed\"}, {\"id\": \"agent-3\", \"slug\": \"reviewer-cursor\", \"name\": \"reviewer-cursor\", \"harness\": \"cursor\"}, {\"id\": \"agent-4\", \"slug\": \"dual-review\", \"name\": \"dual-review\", \"harness\": \"claude-host\"}, {\"id\": \"agent-5\", \"slug\": \"local-harness\", \"name\": \"local-harness\", \"harness\": \"exo-adapter\"}, {\"id\": \"agent-6\", \"slug\": \"ops-slack\", \"name\": \"ops-slack\", \"harness\": \"claude-host\"}, {\"id\": \"agent-7\", \"slug\": \"researcher\", \"name\": \"researcher\", \"harness\": \"claude-host\"}]}"
+    "body": "{\"agents\":[{\"id\":\"agt_1\",\"slug\":\"dual-review\",\"name\":\"dual-review\",\"harness\":\"<repo>/harnesses/claude-host/harness.ts\"},{\"id\":\"agt_2\",\"slug\":\"dual-review-cursor\",\"name\":\"dual-review-cursor\",\"harness\":\"cursor\"},{\"id\":\"agt_3\",\"slug\":\"local-harness\",\"name\":\"local-harness\",\"harness\":\"<repo>/harnesses/local-shim/harness.ts\"},{\"id\":\"agt_4\",\"slug\":\"ops-slack\",\"name\":\"ops-slack\",\"harness\":\"<repo>/harnesses/claude-host/harness.ts\"},{\"id\":\"agt_5\",\"slug\":\"repo-builder\",\"name\":\"repo-builder\",\"harness\":\"<repo>/harnesses/claude-host/harness.ts\"},{\"id\":\"agt_6\",\"slug\":\"repo-builder-b\",\"name\":\"repo-builder-b\",\"harness\":\"<repo>/harnesses/claude-sandboxed/claude-code-harness.ts\"},{\"id\":\"agt_7\",\"slug\":\"researcher\",\"name\":\"researcher\",\"harness\":\"<repo>/harnesses/claude-host/harness.ts\"},{\"id\":\"agt_8\",\"slug\":\"reviewer-cursor\",\"name\":\"reviewer-cursor\",\"harness\":\"cursor\"}]}"
   }
 }

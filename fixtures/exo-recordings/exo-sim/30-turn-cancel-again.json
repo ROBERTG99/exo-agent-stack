@@ -1,0 +1,15 @@
+{
+  "name": "turn-cancel-again",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_4/turn/trn_3/cancel"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "canceled_active_turn": false,
+      "finished_event_id": "48"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "event-list-last",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_1/event",
+    "query": "direction=desc&event_type=turn_ended&limit=1"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "events": [
+        {
+          "id": "12",
+          "type": "turn_ended",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "status": "completed"
+        }
+      ]
+    }
+  }
+}

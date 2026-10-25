@@ -1,0 +1,14 @@
+{
+  "name": "exo-previews (generated from fixtures/exo-recordings/exo-sim; do not edit)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent/agt_5/thread/thr_2/previews"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "null"
+  }
+}

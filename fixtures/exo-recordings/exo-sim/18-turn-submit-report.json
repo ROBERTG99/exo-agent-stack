@@ -1,0 +1,33 @@
+{
+  "name": "turn-submit-report",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_2/turn",
+    "body": {
+      "input": "[[scenario:report-twice]] write the summary"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "agent": {
+        "id": "agt_5",
+        "slug": "repo-builder"
+      },
+      "thread": {
+        "id": "thr_2",
+        "slug": "recording-report",
+        "name": null,
+        "agent_id": "agt_5",
+        "environment": null,
+        "harness": null
+      },
+      "turn": {
+        "id": "trn_2",
+        "session_id": "ses_2"
+      },
+      "harness": null
+    }
+  }
+}

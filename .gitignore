@@ -42,3 +42,6 @@ Icon?
 .tmp.drivedownload*
 # local-only Claude Code overrides
 .claude/settings.local.json
+
+# Re-recordings from a real Exo are reviewed by the maintainer before they are committed
+fixtures/exo-recordings/exo-host/

@@ -1,0 +1,20 @@
+{
+  "name": "agent-doctor",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/doctor"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "checks": [
+        {
+          "name": "definition",
+          "status": "pass"
+        }
+      ]
+    }
+  }
+}

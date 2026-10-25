@@ -1,0 +1,17 @@
+{
+  "name": "agent-unknown-threads",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agent-that-does-not-exist/thread"
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "unknown agent"
+      }
+    }
+  }
+}

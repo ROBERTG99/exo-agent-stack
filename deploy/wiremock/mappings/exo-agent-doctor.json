@@ -1,0 +1,14 @@
+{
+  "name": "exo-agent-doctor (generated from fixtures/exo-recordings/exo-sim; do not edit)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent/agt_5/doctor"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"ok\":true,\"checks\":[{\"name\":\"definition\",\"status\":\"pass\"}]}"
+  }
+}

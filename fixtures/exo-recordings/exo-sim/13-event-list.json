@@ -1,0 +1,162 @@
+{
+  "name": "event-list",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_1/event",
+    "query": "limit=1000"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "events": [
+        {
+          "id": "1",
+          "type": "thread_created",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": null,
+          "turn_id": null,
+          "slug": "recording-a",
+          "name": null,
+          "environment": null
+        },
+        {
+          "id": "2",
+          "type": "session_started",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": null
+        },
+        {
+          "id": "3",
+          "type": "turn_started",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1"
+        },
+        {
+          "id": "4",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "user",
+          "text": "[[scenario:approval-edit]] edit notes.md"
+        },
+        {
+          "id": "5",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "assistant",
+          "usage": {
+            "model": "fake-model",
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "prompt_cached_tokens": 0,
+            "prompt_cache_creation_tokens": 0,
+            "completion_reasoning_tokens": 0,
+            "cost_usd": 0.003,
+            "duration_ms": 1
+          }
+        },
+        {
+          "id": "6",
+          "type": "tool_requested",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "call_id": "call_approval-edit_0",
+          "name": "authorize",
+          "arguments": {
+            "name": "claude.Edit",
+            "arguments": {
+              "file_path": "notes.md"
+            }
+          }
+        },
+        {
+          "id": "7",
+          "type": "agent_runtime.approval_requested",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "approval_id": "apr_1",
+          "tool": "claude.Edit",
+          "arguments": {
+            "file_path": "notes.md"
+          },
+          "call_id": "call_approval-edit_0"
+        },
+        {
+          "id": "8",
+          "type": "agent_runtime.approval_response",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "approval_id": "apr_1",
+          "approved": true,
+          "allow_for_tool": false
+        },
+        {
+          "id": "9",
+          "type": "tool_result",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "call_id": "call_approval-edit_0",
+          "name": "authorize",
+          "output": "{\"approved\":true}"
+        },
+        {
+          "id": "10",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "assistant",
+          "usage": {
+            "model": "fake-model",
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "prompt_cached_tokens": 0,
+            "prompt_cache_creation_tokens": 0,
+            "completion_reasoning_tokens": 0,
+            "cost_usd": 0.003,
+            "duration_ms": 1
+          }
+        },
+        {
+          "id": "11",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "assistant",
+          "text": "Edit approved and applied."
+        },
+        {
+          "id": "12",
+          "type": "turn_ended",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_1",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "status": "completed"
+        }
+      ]
+    }
+  }
+}

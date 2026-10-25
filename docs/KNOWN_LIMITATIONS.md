@@ -6,13 +6,14 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 
 - **What:** `vendor/exo` is not checked out. BUILD.md pins commit `f9f012730fd3bf7e061e3e947e01bd6c2bb415e9` but never names the repository URL. A web search found a candidate (`https://github.com/exoharness/exo`), but the permission classifier denied cloning it and the build did not use it without the maintainer's confirmation (see `PROGRESS.md`, "Needs the maintainer", and `docs/DECISIONS.md`).
 - **Consequence:** V-1 to V-11, the real-Exo binary, `make exo-build`, `@real-exo` suites and recordings from a real Exo cannot be produced. Everything that depends on them is marked blocked in `PROGRESS.md`.
-- **Closes when:** the maintainer confirms the URL; then T-02 and T-09 run and the placeholder fixtures below are replaced by recordings.
+- **Closes when:** the maintainer confirms the URL; then T-02 and T-09 run and the simulator recordings below are replaced by real ones.
 
-## Exo API fixtures are hand-written placeholders
+## Exo API fixtures are recorded from the simulator, not from Exo
 
-- **What:** `deploy/wiremock/mappings/exo-agent-list.json` (and any other mapping added before T-08) is written from the spec's description of `GET /exo/agent`, not recorded from a real Exo. The agent object fields (`id`, `slug`, `name`, `harness`) are an assumption; stackd only relies on `id` being a string.
+- **What:** `fixtures/exo-recordings/exo-sim/` (34 recordings) and the six WireMock mappings generated from them come from `exo-sim` through `make record-exo-sim`, not from a real Exo. The request and response shapes are the ones `packages/exo-client` assumes, so a contract test passing means the client, the recordings and the simulator agree with each other, not with Exo. The agent object fields (`id`, `slug`, `name`, `harness`) stay an assumption; stackd only relies on `id` being a string.
+- **Simulator behaviours worth knowing:** the fake model picks its scenario from the first user message of a conversation, so a second turn on a thread continues the first scenario (the recorder uses a fresh thread for each scenario); the simulator runs the scripted harness for every agent whatever harness the definition names.
 - **Consequence:** WireMock-backed tests prove stackd's behaviour against this stand-in, not against Exo.
-- **Closes when:** `make record-exo-fixtures` runs against a real Exo (T-08).
+- **Closes when:** `make record-exo-fixtures` runs against a real Exo (`EXOS_EXO_URL`), `make test-exo` passes, and the shape differences it reports are resolved or recorded.
 
 ## WireMock container runs as root
 

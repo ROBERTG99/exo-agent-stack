@@ -1,0 +1,22 @@
+{
+  "name": "agent-list-by-slug",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent",
+    "query": "slug=repo-builder"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "agents": [
+        {
+          "id": "agt_5",
+          "slug": "repo-builder",
+          "name": "repo-builder",
+          "harness": "<repo>/harnesses/claude-host/harness.ts"
+        }
+      ]
+    }
+  }
+}

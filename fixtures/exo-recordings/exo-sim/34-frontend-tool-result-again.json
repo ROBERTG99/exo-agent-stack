@@ -1,0 +1,25 @@
+{
+  "name": "frontend-tool-result-again",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_5/turn/trn_4/frontend-tool-result",
+    "body": {
+      "session_id": "ses_4",
+      "tool_call_id": "call_ask-user_0",
+      "result": {
+        "type": "frontend_tool_success",
+        "output": "staging"
+      }
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "already_decided",
+        "message": "the tool call already has a result"
+      }
+    }
+  }
+}

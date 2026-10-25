@@ -1,0 +1,14 @@
+{
+  "name": "turn-get-finished",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_1/turn/trn_1"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "active": false
+    }
+  }
+}

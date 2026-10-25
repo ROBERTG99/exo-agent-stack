@@ -1,0 +1,12 @@
+{
+  "name": "previews",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_2/previews"
+  },
+  "response": {
+    "status": 200,
+    "body": null
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "artifact-list",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_2/artifact"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "artifacts": [
+        {
+          "name": "summary",
+          "version": 1,
+          "bytes": 22
+        },
+        {
+          "name": "summary",
+          "version": 2,
+          "bytes": 23
+        }
+      ]
+    }
+  }
+}

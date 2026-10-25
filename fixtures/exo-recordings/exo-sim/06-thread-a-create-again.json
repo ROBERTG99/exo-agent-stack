@@ -1,0 +1,30 @@
+{
+  "name": "thread-a-create-again",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread",
+    "body": {
+      "vaults": [],
+      "thread_slug": "recording-a"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "agent": {
+        "id": "agt_5",
+        "slug": "repo-builder"
+      },
+      "thread": {
+        "id": "thr_1",
+        "slug": "recording-a",
+        "name": null,
+        "agent_id": "agt_5",
+        "environment": null,
+        "harness": null
+      },
+      "harness": "<repo>/harnesses/claude-host/harness.ts"
+    }
+  }
+}

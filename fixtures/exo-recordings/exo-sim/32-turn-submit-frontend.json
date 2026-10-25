@@ -1,0 +1,38 @@
+{
+  "name": "turn-submit-frontend",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_5/turn",
+    "body": {
+      "input": "[[scenario:ask-user]] ask me",
+      "frontend_tools": [
+        {
+          "name": "ask_user"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "agent": {
+        "id": "agt_5",
+        "slug": "repo-builder"
+      },
+      "thread": {
+        "id": "thr_5",
+        "slug": "recording-c",
+        "name": null,
+        "agent_id": "agt_5",
+        "environment": null,
+        "harness": null
+      },
+      "turn": {
+        "id": "trn_4",
+        "session_id": "ses_4"
+      },
+      "harness": null
+    }
+  }
+}

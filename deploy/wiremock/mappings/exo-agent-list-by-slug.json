@@ -1,0 +1,19 @@
+{
+  "name": "exo-agent-list-by-slug (generated from fixtures/exo-recordings/exo-sim; do not edit)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent",
+    "queryParameters": {
+      "slug": {
+        "equalTo": "repo-builder"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"agents\":[{\"id\":\"agt_5\",\"slug\":\"repo-builder\",\"name\":\"repo-builder\",\"harness\":\"<repo>/harnesses/claude-host/harness.ts\"}]}"
+  }
+}

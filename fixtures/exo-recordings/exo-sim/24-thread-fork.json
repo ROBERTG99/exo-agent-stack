@@ -1,0 +1,24 @@
+{
+  "name": "thread-fork",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_1/fork",
+    "body": {
+      "thread_name": "recording-fork"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "thread": {
+        "id": "thr_3",
+        "slug": "thr_3",
+        "name": "recording-fork",
+        "agent_id": "agt_5",
+        "environment": null,
+        "harness": null
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "event-list-fork",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_3/event",
+    "query": "limit=5"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "events": [
+        {
+          "id": "28",
+          "type": "thread_created",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_3",
+          "session_id": null,
+          "turn_id": null,
+          "slug": "recording-a",
+          "name": null,
+          "environment": null
+        },
+        {
+          "id": "29",
+          "type": "session_started",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_3",
+          "session_id": "ses_1",
+          "turn_id": null
+        },
+        {
+          "id": "30",
+          "type": "turn_started",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_3",
+          "session_id": "ses_1",
+          "turn_id": "trn_1"
+        },
+        {
+          "id": "31",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_3",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "user",
+          "text": "[[scenario:approval-edit]] edit notes.md"
+        },
+        {
+          "id": "32",
+          "type": "messages",
+          "ts": "2026-01-01T00:00:00.000Z",
+          "thread_id": "thr_3",
+          "session_id": "ses_1",
+          "turn_id": "trn_1",
+          "role": "assistant",
+          "usage": {
+            "model": "fake-model",
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "prompt_cached_tokens": 0,
+            "prompt_cache_creation_tokens": 0,
+            "completion_reasoning_tokens": 0,
+            "cost_usd": 0.003,
+            "duration_ms": 1
+          }
+        }
+      ]
+    }
+  }
+}

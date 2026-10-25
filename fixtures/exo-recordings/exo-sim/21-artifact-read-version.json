@@ -1,0 +1,17 @@
+{
+  "name": "artifact-read-version",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread/thr_2/artifact/read",
+    "query": "name=summary&version=1"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "name": "summary",
+      "version": 1,
+      "content": "# Summary\n\nfirst draft"
+    }
+  }
+}

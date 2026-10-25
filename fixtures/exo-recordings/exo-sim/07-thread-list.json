@@ -1,0 +1,25 @@
+{
+  "name": "thread-list",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent/agt_5/thread",
+    "query": "limit=10"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "threads": [
+        {
+          "id": "thr_1",
+          "slug": "recording-a",
+          "name": null,
+          "agent_id": "agt_5",
+          "environment": null,
+          "harness": null
+        }
+      ],
+      "next_cursor": null
+    }
+  }
+}

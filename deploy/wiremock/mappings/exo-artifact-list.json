@@ -1,0 +1,14 @@
+{
+  "name": "exo-artifact-list (generated from fixtures/exo-recordings/exo-sim; do not edit)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent/agt_5/thread/thr_2/artifact"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"artifacts\":[{\"name\":\"summary\",\"version\":1,\"bytes\":22},{\"name\":\"summary\",\"version\":2,\"bytes\":23}]}"
+  }
+}

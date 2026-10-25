@@ -1,0 +1,410 @@
+{
+  "agent-list": {
+    "agents": [
+      {
+        "harness": "string",
+        "id": "string",
+        "name": "string",
+        "slug": "string"
+      }
+    ]
+  },
+  "agent-list-by-slug": {
+    "agents": [
+      {
+        "harness": "string",
+        "id": "string",
+        "name": "string",
+        "slug": "string"
+      }
+    ]
+  },
+  "agent-doctor": {
+    "checks": [
+      {
+        "name": "string",
+        "status": "string"
+      }
+    ],
+    "ok": "boolean"
+  },
+  "agent-unknown-threads": {
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  },
+  "thread-a-thread-create": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "string",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    }
+  },
+  "thread-a-create-again": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "string",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    }
+  },
+  "thread-list": {
+    "next_cursor": "null",
+    "threads": [
+      {
+        "agent_id": "string",
+        "environment": "null",
+        "harness": "null",
+        "id": "string",
+        "name": "null",
+        "slug": "string"
+      }
+    ]
+  },
+  "turn-submit": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "null",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    },
+    "turn": {
+      "id": "string",
+      "session_id": "string"
+    }
+  },
+  "turn-get-active": {
+    "active": "boolean"
+  },
+  "event-list-waiting": {
+    "events": [
+      {
+        "approval_id": "string",
+        "arguments": "mixed",
+        "call_id": "string",
+        "environment": "null",
+        "id": "string",
+        "name": "mixed",
+        "role": "string",
+        "session_id": "mixed",
+        "slug": "string",
+        "text": "string",
+        "thread_id": "string",
+        "tool": "string",
+        "ts": "string",
+        "turn_id": "mixed",
+        "type": "string",
+        "usage": {
+          "completion_reasoning_tokens": "number",
+          "completion_tokens": "number",
+          "cost_usd": "number",
+          "duration_ms": "number",
+          "model": "string",
+          "prompt_cache_creation_tokens": "number",
+          "prompt_cached_tokens": "number",
+          "prompt_tokens": "number"
+        }
+      }
+    ]
+  },
+  "approval-respond": {},
+  "turn-get-finished": {
+    "active": "boolean"
+  },
+  "event-list": {
+    "events": [
+      {
+        "allow_for_tool": "boolean",
+        "approval_id": "string",
+        "approved": "boolean",
+        "arguments": "mixed",
+        "call_id": "string",
+        "environment": "null",
+        "id": "string",
+        "name": "mixed",
+        "output": "string",
+        "role": "string",
+        "session_id": "mixed",
+        "slug": "string",
+        "status": "string",
+        "text": "string",
+        "thread_id": "string",
+        "tool": "string",
+        "ts": "string",
+        "turn_id": "mixed",
+        "type": "string",
+        "usage": {
+          "completion_reasoning_tokens": "number",
+          "completion_tokens": "number",
+          "cost_usd": "number",
+          "duration_ms": "number",
+          "model": "string",
+          "prompt_cache_creation_tokens": "number",
+          "prompt_cached_tokens": "number",
+          "prompt_tokens": "number"
+        }
+      }
+    ]
+  },
+  "event-list-last": {
+    "events": [
+      {
+        "id": "string",
+        "session_id": "string",
+        "status": "string",
+        "thread_id": "string",
+        "ts": "string",
+        "turn_id": "string",
+        "type": "string"
+      }
+    ]
+  },
+  "approval-respond-again": {
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  },
+  "event-watch": [
+    {
+      "allow_for_tool": "boolean",
+      "approval_id": "string",
+      "approved": "boolean",
+      "arguments": "mixed",
+      "call_id": "string",
+      "environment": "null",
+      "id": "string",
+      "name": "mixed",
+      "output": "string",
+      "role": "string",
+      "session_id": "mixed",
+      "slug": "string",
+      "status": "string",
+      "text": "string",
+      "thread_id": "string",
+      "tool": "string",
+      "ts": "string",
+      "turn_id": "mixed",
+      "type": "string",
+      "usage": {
+        "completion_reasoning_tokens": "number",
+        "completion_tokens": "number",
+        "cost_usd": "number",
+        "duration_ms": "number",
+        "model": "string",
+        "prompt_cache_creation_tokens": "number",
+        "prompt_cached_tokens": "number",
+        "prompt_tokens": "number"
+      }
+    }
+  ],
+  "thread-report-thread-create": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "string",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    }
+  },
+  "turn-submit-report": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "null",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    },
+    "turn": {
+      "id": "string",
+      "session_id": "string"
+    }
+  },
+  "artifact-list": {
+    "artifacts": [
+      {
+        "bytes": "number",
+        "name": "string",
+        "version": "number"
+      }
+    ]
+  },
+  "artifact-read": {
+    "content": "string",
+    "name": "string",
+    "version": "number"
+  },
+  "artifact-read-version": {
+    "content": "string",
+    "name": "string",
+    "version": "number"
+  },
+  "artifact-read-missing": {
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  },
+  "previews": "null",
+  "thread-fork": {
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "string",
+      "slug": "string"
+    }
+  },
+  "event-list-fork": {
+    "events": [
+      {
+        "environment": "null",
+        "id": "string",
+        "name": "null",
+        "role": "string",
+        "session_id": "mixed",
+        "slug": "string",
+        "text": "string",
+        "thread_id": "string",
+        "ts": "string",
+        "turn_id": "mixed",
+        "type": "string",
+        "usage": {
+          "completion_reasoning_tokens": "number",
+          "completion_tokens": "number",
+          "cost_usd": "number",
+          "duration_ms": "number",
+          "model": "string",
+          "prompt_cache_creation_tokens": "number",
+          "prompt_cached_tokens": "number",
+          "prompt_tokens": "number"
+        }
+      }
+    ]
+  },
+  "thread-b-thread-create": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "string",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    }
+  },
+  "turn-submit-busy": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "null",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    },
+    "turn": {
+      "id": "string",
+      "session_id": "string"
+    }
+  },
+  "turn-submit-while-active": {
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  },
+  "turn-cancel": {
+    "canceled_active_turn": "boolean",
+    "finished_event_id": "string"
+  },
+  "turn-cancel-again": {
+    "canceled_active_turn": "boolean",
+    "finished_event_id": "string"
+  },
+  "thread-c-thread-create": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "string",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    }
+  },
+  "turn-submit-frontend": {
+    "agent": {
+      "id": "string",
+      "slug": "string"
+    },
+    "harness": "null",
+    "thread": {
+      "agent_id": "string",
+      "environment": "null",
+      "harness": "null",
+      "id": "string",
+      "name": "null",
+      "slug": "string"
+    },
+    "turn": {
+      "id": "string",
+      "session_id": "string"
+    }
+  },
+  "frontend-tool-result": {},
+  "frontend-tool-result-again": {
+    "error": {
+      "code": "string",
+      "message": "string"
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "agent-list",
+  "source": "exo-sim",
+  "request": {
+    "method": "GET",
+    "path": "/agent"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "agents": [
+        {
+          "id": "agt_1",
+          "slug": "dual-review",
+          "name": "dual-review",
+          "harness": "<repo>/harnesses/claude-host/harness.ts"
+        },
+        {
+          "id": "agt_2",
+          "slug": "dual-review-cursor",
+          "name": "dual-review-cursor",
+          "harness": "cursor"
+        },
+        {
+          "id": "agt_3",
+          "slug": "local-harness",
+          "name": "local-harness",
+          "harness": "<repo>/harnesses/local-shim/harness.ts"
+        },
+        {
+          "id": "agt_4",
+          "slug": "ops-slack",
+          "name": "ops-slack",
+          "harness": "<repo>/harnesses/claude-host/harness.ts"
+        },
+        {
+          "id": "agt_5",
+          "slug": "repo-builder",
+          "name": "repo-builder",
+          "harness": "<repo>/harnesses/claude-host/harness.ts"
+        },
+        {
+          "id": "agt_6",
+          "slug": "repo-builder-b",
+          "name": "repo-builder-b",
+          "harness": "<repo>/harnesses/claude-sandboxed/claude-code-harness.ts"
+        },
+        {
+          "id": "agt_7",
+          "slug": "researcher",
+          "name": "researcher",
+          "harness": "<repo>/harnesses/claude-host/harness.ts"
+        },
+        {
+          "id": "agt_8",
+          "slug": "reviewer-cursor",
+          "name": "reviewer-cursor",
+          "harness": "cursor"
+        }
+      ]
+    }
+  }
+}

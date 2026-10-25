@@ -1,0 +1,20 @@
+{
+  "name": "turn-submit-while-active",
+  "source": "exo-sim",
+  "request": {
+    "method": "POST",
+    "path": "/agent/agt_5/thread/thr_4/turn",
+    "body": {
+      "input": "a second instruction"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "turn_active",
+        "message": "the thread already has an active turn"
+      }
+    }
+  }
+}

@@ -173,12 +173,18 @@ host-down: ## Stop the native stack
 	$(call NOT_YET,T-33)
 
 .PHONY: record-exo-fixtures
-record-exo-fixtures: ## Host-only: re-record WireMock mappings from a real Exo
-	$(call NOT_YET,T-08)
+record-exo-fixtures: ## Host-only: re-record the Exo fixtures from a real Exo and compare shapes
+	@test -n "$$EXOS_EXO_URL" || { echo "set EXOS_EXO_URL to a running Exo, for example http://127.0.0.1:9810/exo" >&2; exit 1; }
+	$(PNPM) exec tsx scripts/record-exo.ts --base-url "$$EXOS_EXO_URL" --out fixtures/exo-recordings/exo-host
+	$(PNPM) exec tsx scripts/record-exo.ts --compare fixtures/exo-recordings/exo-sim fixtures/exo-recordings/exo-host
+
+.PHONY: record-exo-sim
+record-exo-sim: ## Re-record the Exo fixtures and WireMock mappings from the simulator
+	$(PNPM) exec tsx scripts/record-exo.ts --sim
 
 .PHONY: test-exo
-test-exo: ## Host-only: real-Exo tests
-	$(call NOT_YET,T-08)
+test-exo: ## Host-only: real-Exo tests (needs EXOS_EXO_URL; skips with a reason without it)
+	$(PNPM) exec vitest run --project contract tests/contract/exo-real.test.ts
 
 .PHONY: plugin-validate
 plugin-validate: ## Validate the Claude Code plugin
