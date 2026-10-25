@@ -83,6 +83,8 @@ const real = (p: string): string => {
 export class WorktreeManager {
   private readonly baseDir: string;
   private readonly roots: string[];
+  /** The roots as given: a caller may name a root through a symlink alias (macOS /var). */
+  private readonly lexicalRoots: string[];
   /** Serialises git operations per repository: `git worktree add` takes locks in the shared .git. */
   private readonly queues = new Map<string, Promise<unknown>>();
 
@@ -92,6 +94,7 @@ export class WorktreeManager {
   ) {
     this.baseDir = real(opts.baseDir);
     this.roots = opts.allowedRoots.map(real);
+    this.lexicalRoots = opts.allowedRoots.map((r) => path.resolve(r));
   }
 
   get(threadSlug: string): WorktreeRow | undefined {
@@ -206,11 +209,23 @@ export class WorktreeManager {
 
   // --- workspace validation ------------------------------------------------------------------
 
+  /** Throws WorkspaceNotAllowedError unless `p` (lexically and after symlinks) is inside an allowed root. */
+  assertPathAllowed(p: string): string {
+    if (!path.isAbsolute(p)) throw new WorkspaceNotAllowedError("path must be absolute");
+    const lexical = path.resolve(p);
+    if (!this.allowedLexically(lexical))
+      throw new WorkspaceNotAllowedError(`${p} is outside the allowed workspace roots`);
+    const resolved = real(lexical);
+    if (!this.allowed(resolved))
+      throw new WorkspaceNotAllowedError(`${p} resolves outside the allowed workspace roots`);
+    return resolved;
+  }
+
   private async resolveRepository(workspace: string): Promise<string> {
     if (!path.isAbsolute(workspace))
       throw new WorkspaceNotAllowedError("workspace must be an absolute path");
     const lexical = path.resolve(workspace);
-    if (!this.allowed(lexical))
+    if (!this.allowedLexically(lexical))
       throw new WorkspaceNotAllowedError(`${workspace} is outside the allowed workspace roots`);
 
     let resolved: string;
@@ -315,8 +330,14 @@ export class WorktreeManager {
     ]);
   }
 
+  /** Inside a root once symlinks are resolved. */
   private allowed(p: string): boolean {
     return this.roots.some((root) => inside(p, root));
+  }
+
+  /** The path as written is inside a root, or inside a root as the caller named it. */
+  private allowedLexically(p: string): boolean {
+    return this.allowed(p) || this.lexicalRoots.some((root) => inside(p, root));
   }
 
   // --- git -----------------------------------------------------------------------------------

@@ -118,3 +118,8 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 - **What:** `environments/allowlists.yaml` lists hosts per agent, but an environment (for example `smolvm-default`) is shared and, as far as the spec says, Exo's limited networking is a property of the environment, not of the agent (unverified, V-15). `doctor/src/environments.ts` therefore reports a limited environment with the union of every agent's list. Doctor D-10 ("allowlists within `allowlists.yaml`") passes by construction on that data, and an agent with an empty list (`reviewer-cursor`) would share the union if it were run in the same sandbox.
 - **Consequence:** D-10 catches a host that was added to an environment outside `allowlists.yaml`, not an agent that gets more hosts than its own list. Per-agent isolation needs one environment per allowlist.
 - **Closes when:** the doctor task (T-31) compares each sandboxed agent's list with the environment it is created in and warns on a wider one, or Exo is verified to scope the policy per agent.
+
+## stackd threads API: conventions Exo has not confirmed
+
+- **What:** (1) `resources` in `POST /api/v1/threads` are checked against `EXOS_ALLOWED_WORKSPACE_ROOTS` and audited, but nothing mounts them, because the thread-create body in BUILD.md §4.2 has no field for them. (2) The harness is expected to find the worktree at `<state dir>/worktrees/<thread slug>`. (3) Thread status looks at the newest 200 events, so a request that has been open for longer than that window shows as not pending. (4) `EXOS_MAX_ACTIVE_TURNS` is not enforced yet (T-28).
+- **Closes when:** the maintainer's Exo run shows how a harness receives a workspace and extra mounts (V-3, V-12); the supervisor in T-28 tracks active turns.

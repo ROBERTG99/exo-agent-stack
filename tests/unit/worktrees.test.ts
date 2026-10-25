@@ -455,3 +455,32 @@ describe("WorktreeManager.get, list, remove, reconcile", () => {
     expect(existsSync(join(again.worktree_path, "README.md"))).toBe(true);
   });
 });
+
+describe("WorktreeManager with an allowed root that is reached through a symlink alias", () => {
+  // macOS temp directories are such an alias (/var -> /private/var): callers pass the alias path.
+  function aliased() {
+    const { root, repo, db, baseDir } = setup();
+    const alias = join(realpathSync(mkdtempSync(join(tmpdir(), "wt-alias-"))), "alias");
+    symlinkSync(root, alias);
+    const manager = new WorktreeManager(db, { baseDir, allowedRoots: [alias] });
+    return { alias, repo, root, manager };
+  }
+
+  it("accepts a workspace given through the alias and through the real path", async () => {
+    const { alias, repo, manager } = aliased();
+    const viaAlias = await manager.create({
+      threadSlug: "d-aaaaaaaaaa",
+      workspace: join(alias, "project"),
+    });
+    expect(viaAlias.repo_path).toBe(repo);
+    const viaReal = await manager.create({ threadSlug: "d-bbbbbbbbbb", workspace: repo });
+    expect(viaReal.repo_path).toBe(repo);
+  });
+
+  it("returns the resolved path from assertPathAllowed and still refuses a path outside", () => {
+    const { alias, repo, manager } = aliased();
+    expect(manager.assertPathAllowed(join(alias, "project"))).toBe(repo);
+    expect(() => manager.assertPathAllowed("/etc")).toThrow(WorkspaceNotAllowedError);
+    expect(() => manager.assertPathAllowed("relative/path")).toThrow(WorkspaceNotAllowedError);
+  });
+});
