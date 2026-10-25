@@ -43,3 +43,9 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 
 - **What:** `fake-model` implements the public OpenAI Responses, OpenAI chat-completions and Anthropic messages formats (non-streaming and a basic streaming form). Whether Exo's `runResponsesHarnessTurn` accepts exactly these Responses events (for example the event names and the `id`/`call_id` fields) is unverified.
 - **Closes when:** T-17 runs the scripted harness against the fake model under the real Exo (`@real-exo` suite) or T-09 reads the consumer in the pinned source.
+
+## Scripted harness: the Exo adapter (`harnesses/scripted/harness.ts`) is not written
+
+- **What:** `harnesses/scripted/turn.ts` (the turn loop) and `ledger.ts` are done and tested (10 tests: exactly-once replay after a crash between steps and after execute-before-record, idempotent ledger, round-trip cap, tool errors surfaced to the model). The module Exo loads (`defineHarness({ nativeToolApprovals, reconcileUnresolvedToolCalls: true, runTurn, resumeTurn })`) is not written: it must read the durable conversation through Exo's `TurnContext`, and the documented member list (`request`, `tools`, `agentConfig`, `conversationConfig`, `authorizeTool`, `executeTool`, `executePendingTools`, `startSandboxProcess`, `stream.*`, `exoharness.current`) does not say how the history is obtained. Guessing would produce code that looks finished but cannot run.
+- **Consequence:** the offline stack and offline durability evals use the loop through the Exo simulator (docs/DECISIONS.md, "exo-sim"); the `@real-exo` suites cannot run.
+- **Closes when:** T-09 reads `TurnContext` in the pinned source (new verification item V-12); the adapter is then a thin mapping from the context to `TurnPorts`.
