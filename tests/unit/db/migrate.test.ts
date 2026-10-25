@@ -18,6 +18,7 @@ describe("migrate", () => {
     const { db } = freshDb();
     expect(tables(db)).toEqual(
       [
+        "approval_cursors",
         "approvals",
         "audit_events",
         "credit_state",
@@ -37,9 +38,10 @@ describe("migrate", () => {
     expect(rows).toEqual([
       { version: 1, name: "init" },
       { version: 2, name: "worktree_base_commit" },
+      { version: 3, name: "approvals_queue" },
     ]);
     expect(migrate(db, defaultMigrationsDir())).toEqual([]);
-    expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()).toEqual({ n: 2 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()).toEqual({ n: 3 });
   });
 
   it("uses WAL, foreign keys and a busy timeout", () => {
@@ -52,15 +54,15 @@ describe("migrate", () => {
   it("applies migrations in version order regardless of the order the files were created", () => {
     const dir = copyMigrations();
     writeFileSync(
-      join(dir, "0004_child.sql"),
+      join(dir, "0005_child.sql"),
       "CREATE TABLE extra_child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES extra_parent(id));",
     );
     writeFileSync(
-      join(dir, "0003_parent.sql"),
+      join(dir, "0004_parent.sql"),
       "CREATE TABLE extra_parent (id INTEGER PRIMARY KEY);",
     );
     const db = openDatabase(join(tempDir(), "stack.db"));
-    expect(migrate(db, dir)).toEqual([1, 2, 3, 4]);
+    expect(migrate(db, dir)).toEqual([1, 2, 3, 4, 5]);
     expect(tables(db)).toEqual(expect.arrayContaining(["extra_parent", "extra_child"]));
   });
 
@@ -75,18 +77,18 @@ describe("migrate", () => {
   it("rolls a failing migration back completely and does not record it", () => {
     const dir = copyMigrations();
     writeFileSync(
-      join(dir, "0003_bad.sql"),
+      join(dir, "0004_bad.sql"),
       "CREATE TABLE half_done (id INTEGER); INSERT INTO table_that_does_not_exist VALUES (1);",
     );
     const db = openDatabase(join(tempDir(), "stack.db"));
     expect(() => migrate(db, dir)).toThrow(/table_that_does_not_exist/);
     expect(tables(db)).not.toContain("half_done");
-    expect(db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get()).toEqual({ v: 2 });
+    expect(db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get()).toEqual({ v: 3 });
   });
 
   it("rejects a gap or duplicate in migration numbering", () => {
     const dir = copyMigrations();
-    writeFileSync(join(dir, "0004_gap.sql"), "SELECT 1;");
+    writeFileSync(join(dir, "0005_gap.sql"), "SELECT 1;");
     const db = openDatabase(join(tempDir(), "stack.db"));
     expect(() => migrate(db, dir)).toThrow(/gap|missing/i);
     const dir2 = copyMigrations();

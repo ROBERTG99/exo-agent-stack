@@ -29,5 +29,5 @@ export interface AppContext {
   /** Where the dashboard lives, for links in responses. */
   dashboardUrl: string;
   /** Appends a hash-chained audit event (every stackd write does). */
-  audit(action: string, target: string, details?: Record<string, unknown>): void;
+  audit(action: string, target: string, details?: Record<string, unknown>, actor?: string): void;
 }

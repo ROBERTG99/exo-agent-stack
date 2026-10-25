@@ -1,9 +1,11 @@
 import { ExoClient, type ExoClientOptions } from "@exos/exo-client";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePort, resolveListenHost } from "@exos/common";
 import { AgentDirectory } from "./agents.ts";
+import { ApprovalQueue, loadDashboardOnly } from "./approvals.ts";
+import { authenticate, setCookieHeader } from "./auth.ts";
 import type { AppContext } from "./context.ts";
 import {
   CreditGuard,
@@ -17,6 +19,7 @@ import { Idempotency } from "./idempotency.ts";
 import { Meter } from "./meter.ts";
 import { loadRates } from "./pricing.ts";
 import { problem } from "./problem.ts";
+import { registerApprovalRoutes } from "./routes/approvals.ts";
 import { registerCreditRoutes } from "./routes/credit.ts";
 import { registerEventRoutes } from "./routes/events.ts";
 import { registerThreadRoutes } from "./routes/threads.ts";
@@ -38,6 +41,8 @@ export interface StackdOptions {
   /** Pass the meter runs at, in seconds; 0 (the default) leaves it to the caller (tests, `main`). */
   meterIntervalSeconds?: number;
   ratesFile?: string;
+  /** Tool patterns only a person in the dashboard may approve (EXOS_APPROVE_DASHBOARD_ONLY). */
+  dashboardOnlyTools?: string[];
   clock?: () => Date;
 }
 
@@ -70,6 +75,7 @@ export interface Stackd {
   db: Db;
   meter: Meter;
   credit: CreditGuard;
+  approvals: ApprovalQueue;
   ctx: AppContext;
   /** Closes the HTTP server and the database. */
   close(): Promise<void>;
@@ -84,8 +90,8 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
   const exo = new ExoClient({ baseUrl: opts.exoUrl, fetch: opts.fetchImpl, ...opts.exoClient });
   const idem = new Idempotency(db, clock);
   idem.purge();
-  const audit: AppContext["audit"] = (action, target, details) => {
-    appendAudit(db, { actor: "api", action, target, details }, clock);
+  const audit: AppContext["audit"] = (action, target, details, actor = "api") => {
+    appendAudit(db, { actor, action, target, details }, clock);
   };
   const creditConfig = opts.credit ?? DEFAULT_CREDIT_CONFIG;
   const credit = new CreditGuard({
@@ -168,21 +174,32 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     }
   });
 
-  const requireToken = async (
-    request: { headers: { authorization?: string } },
-    reply: Parameters<typeof problem>[0],
-  ) => {
-    const presented = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-    if (!tokenMatches(token, presented)) {
+  app.decorateRequest("actor", null);
+  const requireToken = async (request: FastifyRequest, reply: FastifyReply) => {
+    request.actor = authenticate(token, request);
+    if (!request.actor) {
       return problem(
         reply,
         401,
         "unauthorized",
         "Unauthorized",
-        "A valid local bearer token is required",
+        "A valid local bearer token or dashboard session is required",
       );
     }
   };
+
+  // The dashboard signs in once with the local token and then holds a session cookie.
+  app.get("/login", async (request, reply) => {
+    const presented = (request.query as { t?: string }).t;
+    if (!tokenMatches(token, presented)) {
+      return problem(reply, 401, "unauthorized", "Unauthorized", "A valid local token is required");
+    }
+    return reply
+      .header("set-cookie", setCookieHeader(token))
+      .header("cache-control", "no-store")
+      .header("referrer-policy", "no-referrer")
+      .redirect(`${ctx.dashboardUrl}/`, 302);
+  });
 
   app.get("/api/v1/health", async () => {
     const reachable = await exo.listAgents().then(
@@ -200,12 +217,20 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
 
   registerThreadRoutes(app, ctx, requireToken);
   registerEventRoutes(app, ctx, requireToken);
+  const approvals = new ApprovalQueue({
+    db,
+    exo,
+    agents,
+    dashboardOnly: opts.dashboardOnlyTools ?? loadDashboardOnly({}),
+    clock,
+  });
+  registerApprovalRoutes(app, ctx, approvals, requireToken);
 
   app.addHook("onClose", async () => {
     meter.stop();
     db.close();
   });
-  return { app, token, db, meter, credit, ctx, close: () => app.close() };
+  return { app, token, db, meter, credit, approvals, ctx, close: () => app.close() };
 }
 
 export async function main(env: NodeJS.ProcessEnv = process.env): Promise<FastifyInstance> {
@@ -218,6 +243,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<Fastif
     publicPort: port,
     dashboardPort: parsePort(env.EXOS_DASHBOARD_PORT, 9800),
     credit: loadCreditConfig(env),
+    dashboardOnlyTools: loadDashboardOnly(env),
     meterIntervalSeconds: Number(env.EXOS_METER_INTERVAL_SECONDS || 15),
     allowedWorkspaceRoots: (env.EXOS_ALLOWED_WORKSPACE_ROOTS ?? "")
       .split(path.delimiter)
