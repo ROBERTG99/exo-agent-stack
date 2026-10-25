@@ -16,6 +16,7 @@
     "@eslint/js": "^10.0.1",
     "@exos/claude-host": "workspace:*",
     "@exos/common": "workspace:*",
+    "@exos/doctor": "workspace:*",
     "@exos/exo-client": "workspace:*",
     "@exos/fake-model": "workspace:*",
     "@exos/generator": "workspace:*",

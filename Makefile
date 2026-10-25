@@ -153,7 +153,7 @@ doctor: ## exos doctor --json, exit 1 on any fail
 
 .PHONY: agents-lint
 agents-lint: ## Lint agent definitions
-	$(call NOT_YET,T-10)
+	$(PNPM) exec tsx cli/src/main.ts agents lint agents
 
 .PHONY: agents-render
 agents-render: ## Render generated agent definitions

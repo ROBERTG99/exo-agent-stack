@@ -47,7 +47,7 @@ Status: `todo`, `doing`, `done`, `blocked`. Evidence is the command and a one-li
 | T-07 | exo-client [FR-8] | M1 | done | `pnpm exec vitest run --project unit packages/exo-client --coverage`: 34 passed, lines 98.6%, statements 96.0%, branches 88.4% (every §4.2 endpoint, retry policy, timeouts, error mapping, SSE resume, usage parsing); `make check-fast`: 490 passed; typecheck clean. Response shapes unverified against the pin (docs/KNOWN_LIMITATIONS.md) |
 | T-08 | Recordings and contract tests [FR-8] | M1 | todo | |
 | T-09 | Verification log [FR-1] | M1 | todo | |
-| T-10 | Agent linter [FR-2] | M1 | todo | |
+| T-10 | Agent linter [FR-2] | M1 | done | `pnpm exec vitest run --project unit tests/unit/agents`: 24 passed (valid definitions incl. every §4.5 field; unknown key with file:line, also nested; Cursor always_ask as default or per tool; use_sender_vault anywhere; empty Slack channels; untrusted paragraph (whitespace-insensitive, must be last); name vs file; loopback base_url; MCP policy; credential names; referenced paths exist; every problem in a file reported); `make agents-lint` exits 0 on agents/; bad fixtures exit 1 with `file:line: rule: message`. Field set follows §4.5, unverified against Exo's parser (V-6) |
 | T-11 | Agent definitions [FR-2] | M1 | todo | |
 | T-12 | Environments [FR-3] | M1 | todo | |
 | T-13 | Agents sync [FR-2] | M1 | todo | |
