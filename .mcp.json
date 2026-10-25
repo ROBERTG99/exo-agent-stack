@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "exos-bridge": {
+      "command": "node",
+      "args": ["bridge/dist/stdio.js"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}

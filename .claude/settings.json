@@ -1,3 +1,42 @@
 {
-  "attribution": { "commit": "", "pr": "", "sessionUrl": false }
+  "attribution": { "commit": "", "pr": "", "sessionUrl": false },
+  "model": "sonnet",
+  "effortLevel": "high",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git submodule:*)",
+      "Bash(git worktree:*)",
+      "Bash(make:*)",
+      "Bash(pnpm:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(uv:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker build:*)",
+      "Bash(node:*)",
+      "Bash(claude --version)",
+      "Bash(claude --help)",
+      "Read(./.env.example)"
+    ],
+    "deny": [
+      "Read(./.env.*)",
+      "Read(~/.claude/**)",
+      "Read(~/.exo/**)",
+      "Read(~/.cursor/**)",
+      "Bash(claude setup-token:*)",
+      "Bash(claude login:*)",
+      "Bash(cursor-agent login:*)",
+      "Bash(gh auth login:*)",
+      "Bash(exo vault secret:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)"
+    ]
+  }
 }
