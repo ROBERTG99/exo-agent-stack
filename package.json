@@ -19,6 +19,7 @@
     "@exos/fake-model": "workspace:*",
     "@exos/generator": "workspace:*",
     "@exos/stackd": "workspace:*",
+    "@exos/tools": "workspace:*",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
     "esbuild": "^0.28.2",

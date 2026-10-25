@@ -1,0 +1,14 @@
+{
+  "name": "@exos/tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ask-user": "./ask-user.ts",
+    "./run-checks": "./run-checks.ts",
+    "./write-report": "./write-report.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}
