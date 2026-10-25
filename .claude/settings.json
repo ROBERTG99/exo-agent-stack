@@ -9,24 +9,75 @@
       "Bash(git log:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)",
+      "Bash(git push origin:*)",
+      "Bash(git push -u origin:*)",
       "Bash(git submodule:*)",
       "Bash(git worktree:*)",
-      "Bash(make:*)",
-      "Bash(pnpm:*)",
-      "Bash(pnpm exec:*)",
-      "Bash(uv:*)",
+      "Bash(make help)",
+      "Bash(make bootstrap)",
+      "Bash(make check-fast)",
+      "Bash(make lint)",
+      "Bash(make typecheck)",
+      "Bash(make test)",
+      "Bash(make test-unit)",
+      "Bash(make test-exo)",
+      "Bash(make test-docker)",
+      "Bash(make e2e)",
+      "Bash(make eval)",
+      "Bash(make eval-durability)",
+      "Bash(make eval-delegation)",
+      "Bash(make eval-policy)",
+      "Bash(make eval-credit)",
+      "Bash(make bench)",
+      "Bash(make security)",
+      "Bash(make doctor)",
+      "Bash(make seed)",
+      "Bash(make demo)",
+      "Bash(make up)",
+      "Bash(make down)",
+      "Bash(make logs)",
+      "Bash(make docs)",
+      "Bash(make clean)",
+      "Bash(make verify)",
+      "Bash(make verify-clean)",
+      "Bash(make agents-lint)",
+      "Bash(make agents-render)",
+      "Bash(make agents-sync)",
+      "Bash(make plugin-validate)",
+      "Bash(make exo-build)",
+      "Bash(make exo-doctor)",
+      "Bash(make host-up)",
+      "Bash(make host-down)",
+      "Bash(make record-exo-fixtures)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm exec vitest:*)",
+      "Bash(pnpm exec prettier:*)",
+      "Bash(pnpm exec eslint:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm exec markdownlint-cli2:*)",
+      "Bash(pnpm exec playwright test:*)",
+      "Bash(pnpm exec tsx scripts/:*)",
+      "Bash(pnpm --filter:*)",
+      "Bash(uv sync)",
+      "Bash(uv run evalgate:*)",
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
-      "Bash(docker compose:*)",
-      "Bash(docker build:*)",
-      "Bash(node:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose down:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker compose config:*)",
+      "Bash(docker compose build:*)",
       "Bash(claude --version)",
       "Bash(claude --help)",
       "Read(./.env.example)"
     ],
     "deny": [
+      "Read(./.env)",
       "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
       "Read(~/.claude/**)",
       "Read(~/.exo/**)",
       "Read(~/.cursor/**)",
@@ -35,8 +86,56 @@
       "Bash(cursor-agent login:*)",
       "Bash(gh auth login:*)",
       "Bash(exo vault secret:*)",
+      "Bash(make live-claude:*)",
+      "Bash(make live-cursor:*)",
+      "Bash(make eval-live:*)",
       "Bash(rm -rf /:*)",
       "Bash(rm -rf ~:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard.mjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop.sh",
+            "timeout": 90
+          }
+        ]
+      }
     ]
   }
 }

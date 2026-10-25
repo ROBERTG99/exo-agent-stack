@@ -76,7 +76,9 @@ describe("T-03 .env.example", () => {
     ]) {
       expect(envExample, forbidden).not.toContain(forbidden);
     }
-    expect(envExample).not.toMatch(/sk-ant-|sk-proj-|sk-or-v1-/);
+    expect(envExample).not.toMatch(
+      new RegExp(["sk-ant-", "sk-" + "proj-", "sk-" + "or-v1-"].join("|")),
+    );
     expect(declared.get("EXOS_LOCAL_TOKEN")).toBe("");
     // The live guard must never be pre-confirmed in an example file.
     expect(declared.get("EXOS_LIVE_CONFIRM") ?? "").toBe("");

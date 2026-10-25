@@ -103,6 +103,31 @@ describe(".claude/settings.json", () => {
     }
     expect(p.ask).toBeUndefined();
   });
+
+  it("denies every .env variant, including a plain .env and nested ones", () => {
+    for (const d of ["Read(./.env)", "Read(./.env.*)", "Read(./**/.env)", "Read(./**/.env.*)"]) {
+      expect(settings.permissions.deny, d).toContain(d);
+    }
+  });
+
+  it("allows no wildcard interpreters or runners and never the live targets", () => {
+    const allow: string[] = settings.permissions.allow;
+    for (const risky of [
+      "Bash(node:*)",
+      "Bash(pnpm:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(uv:*)",
+      "Bash(make:*)",
+      "Bash(docker compose:*)",
+      "Bash(git push:*)",
+    ]) {
+      expect(allow, risky).not.toContain(risky);
+    }
+    expect(allow.filter((a) => /live-claude|live-cursor|eval-live/.test(a))).toEqual([]);
+    for (const live of ["make live-claude", "make live-cursor", "make eval-live"]) {
+      expect(settings.permissions.deny).toContain(`Bash(${live}:*)`);
+    }
+  });
 });
 
 describe("rules", () => {

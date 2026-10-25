@@ -37,3 +37,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Decision:** `typescript@~6.0.3` for the whole workspace.
 - **Alternatives:** TypeScript 7.0.2 (latest); running typescript-eslint against a side-by-side TS 6 install.
 - **Reason:** `eslint` fails at startup with "typescript-eslint does not support TS 7.0" (typescript-eslint 8.72.0). Lint is a required gate (BUILD.md §12), so the latest version that every tool supports wins. Revisit when typescript-eslint supports TS >= 7.1.
+
+## 2026-10-25 · Permission allow list uses bounded commands, not wildcard runners
+
+- **Decision:** `.claude/settings.json` allows named `make` targets, named `pnpm exec <tool>` forms, `git push origin ...` and `docker compose <verb>`; it denies `Read(./.env)` and nested variants plus the three live make targets. No `node:*`, `pnpm:*`, `uv:*`, `make:*` or `git push:*`.
+- **Alternatives:** broad wildcard entries (fewer prompts, but they allow arbitrary code execution through the allow list).
+- **Reason:** the automated security review flagged the wildcard entries and the missing plain `.env` deny. The spec (§7.1) only requires the entries it lists; the extra convenience entries are ours to keep tight. Force pushes, identity changes and live targets are additionally blocked by `guard.mjs`.
