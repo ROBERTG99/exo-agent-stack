@@ -1,0 +1,8 @@
+id: approval-edit
+description: Asks the harness to authorise an edit, which the bridge may approve.
+steps:
+  - tool: authorize
+    args:
+      name: claude.Edit
+      arguments: { file_path: notes.md }
+  - text: Edit approved and applied.

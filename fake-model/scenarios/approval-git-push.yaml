@@ -1,0 +1,8 @@
+id: approval-git-push
+description: Asks to run git push, which is dashboard-only (FR-11).
+steps:
+  - tool: authorize
+    args:
+      name: claude.Bash
+      arguments: { command: git push origin main }
+  - text: Pushed.

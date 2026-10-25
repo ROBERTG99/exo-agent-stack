@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@exos/common": "workspace:*",
-    "fastify": "^5.0.0"
+    "fastify": "^5.0.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
   },
   "exports": {
     "./server": "./src/server.ts"

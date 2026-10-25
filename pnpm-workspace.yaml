@@ -11,6 +11,9 @@ packages:
   - harnesses/*
   - tools
 
+# better-sqlite3 ships prebuilt binaries (darwin/linux, arm64/x64); building it from source would
+# need a compiler that the slim Docker images do not have, so its build script is not run.
 onlyBuiltDependencies:
-  - better-sqlite3
   - esbuild
+ignoredBuiltDependencies:
+  - better-sqlite3

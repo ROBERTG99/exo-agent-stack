@@ -1,0 +1,8 @@
+id: ask-user
+description: Asks the human a question through the ask_user frontend tool.
+steps:
+  - tool: ask_user
+    args:
+      question: Which environment should I use?
+      choices: [staging, production-copy]
+  - text: Thanks, continuing with your answer.

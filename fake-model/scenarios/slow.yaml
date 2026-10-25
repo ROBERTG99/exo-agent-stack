@@ -1,0 +1,9 @@
+id: slow
+description: Keeps a turn busy (3 s per model call) so a second instruction hits turn_active.
+delay_ms: 3000
+steps:
+  - tool: ledger_append
+    args: { seq: 1 }
+  - tool: ledger_append
+    args: { seq: 2 }
+  - text: Slow scenario finished.

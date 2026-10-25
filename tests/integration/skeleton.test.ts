@@ -356,6 +356,12 @@ describe("skeleton deployment files", () => {
     expect(env.EXOS_IN_CONTAINER).toBe("1");
   });
 
+  it("the fake-model image ships its scenario files", () => {
+    const text = readFileSync(join(root, "docker/fake-model.Dockerfile"), "utf8");
+    expect(text).toContain("COPY --from=build /repo/fake-model/scenarios ./scenarios");
+    expect(text).toContain("FAKE_MODEL_SCENARIOS_DIR=/app/scenarios");
+  });
+
   it("Dockerfiles are non-root-friendly, have HEALTHCHECK and ARG HTTPS_PROXY, and no apt-get", () => {
     for (const f of ["stackd", "fake-model"]) {
       const text = readFileSync(join(root, `docker/${f}.Dockerfile`), "utf8");

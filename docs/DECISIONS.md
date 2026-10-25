@@ -71,3 +71,10 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Reason:** Docker cannot forward to a container-local loopback listener; found by the M0 reviewer as an undocumented deviation from rail 3.
 - **`Read(./.env.example)` allow vs `Read(./.env.*)` deny:** BUILD.md §7.1 mandates both entries and the deny wins, so the allow entry has no effect. Kept as specified; `.env.example` is read with `cat` through Bash when needed (it holds no credential).
 - **Model usage logging:** the automated security reviews in this session come from a plugin hook, not from delegations by the build agent, so they are not in the "Model usage" table; only the build agent's own `opus` delegations are logged there.
+
+## 2026-10-25 · better-sqlite3 runs from its shipped prebuilds; no compile in Docker
+
+- **Decision:** `pnpm-workspace.yaml` no longer allows better-sqlite3 build scripts (`ignoredBuiltDependencies`). Version 13 ships `prebuilds/` for darwin and linux on arm64 and x64, so nothing is compiled locally or in the images.
+- **Alternatives:** compile in a `node:22` (full) build stage; switch to the built-in `node:sqlite`; install a toolchain in `node:22-slim` (forbidden: no `apt-get`).
+- **Evidence:** the 35 DB and CLI unit tests pass with the locally compiled `build/` directory moved away; the stackd image builds on `node:22-slim` aarch64.
+- **Follow-up (T-23/T-47):** when stackd opens its database inside the image, the runtime stage must carry the `better-sqlite3` package directory (it is external to the bundle) and the migrations directory (`EXOS_MIGRATIONS_DIR`).

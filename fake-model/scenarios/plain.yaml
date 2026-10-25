@@ -1,0 +1,4 @@
+id: plain
+description: One text answer, no tools.
+steps:
+  - text: Plain scenario answer.

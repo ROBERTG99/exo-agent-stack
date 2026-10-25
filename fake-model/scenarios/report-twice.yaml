@@ -1,0 +1,12 @@
+id: report-twice
+description: Writes a report with the same name twice, which must produce two artifact versions (FR-7).
+steps:
+  - tool: write_report
+    args:
+      name: summary
+      content: "# Summary\n\nfirst draft"
+  - tool: write_report
+    args:
+      name: summary
+      content: "# Summary\n\nsecond draft"
+  - text: Reports written.

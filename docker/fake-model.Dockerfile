@@ -13,6 +13,8 @@ FROM node:22-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /repo/fake-model/dist/server.mjs ./server.mjs
+COPY --from=build /repo/fake-model/scenarios ./scenarios
+ENV FAKE_MODEL_SCENARIOS_DIR=/app/scenarios
 USER 1000:1000
 EXPOSE 9840
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=10 \
