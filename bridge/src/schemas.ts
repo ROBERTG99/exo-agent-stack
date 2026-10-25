@@ -230,7 +230,7 @@ export const SCHEMAS = {
   exo_approve: {
     title: "Decide an approval",
     description:
-      "Settles a pending tool approval. Only call this when the user has told you, in their own message, to approve or deny this specific request. Git push, npm publish and network tools can only be approved in the dashboard (dashboard_only).",
+      "Settles a pending tool approval. Only call this when the user has told you, in their own message, to approve or deny this specific request. Git push, npm publish and network tools, and approving a tool for the whole session, can only be done in the dashboard (dashboard_only).",
     input: {
       thread,
       request_id: z
@@ -238,13 +238,13 @@ export const SCHEMAS = {
         .min(1)
         .max(200)
         .describe("The approval id from the thread's pending requests."),
-      decision: z.enum(["approve", "deny", "approve_for_session"]),
+      decision: z.enum(["approve", "deny"]),
       reason: z.string().max(500).optional(),
       idempotency_key: key,
     },
     output: {
       approval_id: z.string(),
-      decision: z.enum(["approved", "denied", "approved_for_session"]),
+      decision: z.enum(["approved", "denied"]),
       recorded_event_id: z.string().nullable(),
       replayed: z.boolean(),
     },

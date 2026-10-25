@@ -158,6 +158,22 @@ export function registerApprovalRoutes(
           `approval ${id} is already ${row.decision}`,
         );
       }
+      // allow_for_tool switches the prompt off for every later call of the tool in the session
+      // (`claude.Bash`, so also `git push`): a person decides that, in the dashboard.
+      if (body.decision === "approve_for_session" && actor !== "dashboard") {
+        ctx.audit(
+          "approval.refused_dashboard_only",
+          id,
+          { tool: row.tool, thread: row.thread_slug, decision: body.decision },
+          actor,
+        );
+        throw new ApiError(
+          403,
+          "dashboard_only",
+          "Dashboard only",
+          "approving a tool for the whole session can only be done in the dashboard",
+        );
+      }
       if (row.decision === "dashboard_only") {
         if (actor !== "dashboard") {
           ctx.audit(

@@ -100,7 +100,7 @@ describe("tools/list", () => {
     expect(input("exo_send").message).toMatchObject({ minLength: 1, maxLength: 20_000 });
     expect(input("exo_get_events").limit).toMatchObject({ minimum: 1, maximum: 200 });
     expect(input("exo_approve").reason.maxLength).toBe(500);
-    expect(input("exo_approve").decision.enum).toEqual(["approve", "deny", "approve_for_session"]);
+    expect(input("exo_approve").decision.enum).toEqual(["approve", "deny"]);
     expect(input("exo_answer").answer).toMatchObject({ minLength: 1, maxLength: 8_000 });
   });
 

@@ -254,3 +254,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Why:** the review reproduced a 503 after Exo had accepted the turn: the retry started a second turn with the same input (BUILD.md §4.9, never repeat a step). The key used to be freed whenever nothing was saved, and the turn step saved only after Exo answered.
 - **Evidence:** `tests/integration/threads.test.ts`, "a turn whose reply was lost" (3 tests, with a fetch that drops the answer to the first turn request).
 - **Residual risk:** it assumes nothing else starts a turn on the same thread between the two attempts; stackd is the only Exo writer for these threads and Exo answers 409 while a turn runs.
+
+## 2026-10-25 · Approving a tool for the whole session is dashboard-only (M3 review)
+
+- **Decision:** `POST /approvals/{id}:decide` with `approve_for_session` is refused with 403 `dashboard_only` for any actor other than the dashboard, whatever the tool, and the request stays pending. The bridge's `exo_approve` takes only `approve` or `deny` (schema, generated JSON, plugin command text and contract test updated).
+- **Why:** `allow_for_tool` makes Exo stop asking for every later call of the tool in the session. Approving a harmless `ls` that way would let a later `git push` or `curl` through without reaching the dashboard, which defeats the rule that those are settled only there (§15). The review reproduced the stackd side.
+- **Evidence:** `tests/integration/approvals.test.ts` ("approves for the session ... from the dashboard only"), `tests/contract/bridge-tools.test.ts`. exo-sim does not model `allow_for_tool` beyond recording it; Exo's own behaviour is documented, not run.

@@ -545,7 +545,7 @@
     },
     "exo_approve": {
       "title": "Decide an approval",
-      "description": "Settles a pending tool approval. Only call this when the user has told you, in their own message, to approve or deny this specific request. Git push, npm publish and network tools can only be approved in the dashboard (dashboard_only).",
+      "description": "Settles a pending tool approval. Only call this when the user has told you, in their own message, to approve or deny this specific request. Git push, npm publish and network tools, and approving a tool for the whole session, can only be done in the dashboard (dashboard_only).",
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": true,
@@ -572,8 +572,7 @@
             "type": "string",
             "enum": [
               "approve",
-              "deny",
-              "approve_for_session"
+              "deny"
             ]
           },
           "reason": {
@@ -606,8 +605,7 @@
             "type": "string",
             "enum": [
               "approved",
-              "denied",
-              "approved_for_session"
+              "denied"
             ]
           },
           "recorded_event_id": {

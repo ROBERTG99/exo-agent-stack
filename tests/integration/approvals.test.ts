@@ -169,11 +169,24 @@ describe("deciding", () => {
     expect(JSON.parse((await toolResults(s, t))[0].untrusted_text)).toEqual({ approved: false });
   });
 
-  it("approves for the session by telling Exo to allow the tool", async () => {
+  it("approves for the session by telling Exo to allow the tool, from the dashboard only", async () => {
     const s = await stack();
     await startThread(s, "[[scenario:approval-edit]] edit");
     const [a] = await waitOpen(s, "the approval");
-    const r = await s.call("POST", `/api/v1/approvals/${a.approval_id}:decide`, {
+    // the bridge's token cannot: the tool would stop asking for every later call, `git push` included
+    const refused = await s.call("POST", `/api/v1/approvals/${a.approval_id}:decide`, {
+      decision: "approve_for_session",
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe("dashboard_only");
+    expect(s.sim.store.pending(a.approval_id)!.decision).toBeNull();
+    expect((await openApprovals(s))[0]).toMatchObject({
+      approval_id: a.approval_id,
+      decision: "pending",
+    });
+
+    const web = await dashboard(s);
+    const r = await web("POST", `/api/v1/approvals/${a.approval_id}:decide`, {
       decision: "approve_for_session",
     });
     expect(r.body.decision).toBe("approved_for_session");
