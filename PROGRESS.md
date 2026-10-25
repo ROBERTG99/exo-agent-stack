@@ -1,0 +1,121 @@
+# PROGRESS
+
+Single source of progress for the build described in `BUILD.md` (copy: `docs/specs/000-build-spec.md`). After a compaction or restart: re-read `BUILD.md`, this file, `docs/DECISIONS.md` and `git log --oneline -30`, then resume from the first unchecked task.
+
+## Needs the maintainer
+
+Nothing here is done by the build agent (BUILD.md §0.1, §1.5). Items are added as the build discovers them.
+
+- [ ] Sign in to Claude Code on this Mac (Mode A login).
+- [ ] Run `claude setup-token`, then `scripts/mode-b-store-token.sh` (Mode B; the script stores the token in vault `personal` as `claude-oauth`).
+- [ ] Create a Cursor user key and run `scripts/store-cursor-key.sh`.
+- [ ] Create the Slack app for the `ops-slack` adapter and store its secrets in vault `ops-slack`.
+- [ ] Run `make live-claude`, `make live-cursor` and `make eval-live` (needs `EXOS_LIVE_CONFIRM=yes`; never in CI).
+- [ ] Review 10 policy eval cases and 5 traces (BUILD.md §11).
+- [ ] Push release tags (the build never pushes tags).
+- [ ] Approve Exo pin upgrades (`upgrade-exo-pin` skill prepares them).
+
+## Commit attribution evidence (BUILD.md §1.1)
+
+Local run, `GIT_AUTHOR_*` / `GIT_COMMITTER_*` unset; git config identity is used (never modified by the build).
+
+`git var GIT_AUTHOR_IDENT` → `ROBERTG99 <54124633+ROBERTG99@users.noreply.github.com>`
+`git var GIT_COMMITTER_IDENT` → `ROBERTG99 <54124633+ROBERTG99@users.noreply.github.com>`
+
+`.claude/settings.json` and `.claude/rules/git-commits.md` were not pre-seeded; they were created in the first build commit. Output of `git log -1 --format='%an <%ae> | %cn <%ce>%n%B'` on that commit:
+
+```text
+ROBERTG99 <54124633+ROBERTG99@users.noreply.github.com> | ROBERTG99 <54124633+ROBERTG99@users.noreply.github.com>
+chore: configure commit attribution
+```
+
+(Subject `chore: configure commit attribution`, no trailers.)
+
+## Tasks
+
+Status: `todo`, `doing`, `done`, `blocked`. Evidence is the command and a one-line result.
+
+| ID | Title | Milestone | Status | Evidence |
+|---|---|---|---|---|
+| T-01 | Bootstrap and progress files | M0 | done | `pnpm vitest run tests/harness`: 9 passed (layout.test.ts) |
+| T-02 | Exo submodule and build [FR-1] | M0 | todo | |
+| T-03 | Workspace, Makefile, env example | M0 | todo | |
+| T-04 | Claude Code harness files | M0 | todo | |
+| T-05 | Hooks | M0 | todo | |
+| T-06 | Walking skeleton | M0 | todo | |
+| T-07 | exo-client [FR-8] | M1 | todo | |
+| T-08 | Recordings and contract tests [FR-8] | M1 | todo | |
+| T-09 | Verification log [FR-1] | M1 | todo | |
+| T-10 | Agent linter [FR-2] | M1 | todo | |
+| T-11 | Agent definitions [FR-2] | M1 | todo | |
+| T-12 | Environments [FR-3] | M1 | todo | |
+| T-13 | Agents sync [FR-2] | M1 | todo | |
+| T-14 | stackd store and audit | M1 | todo | |
+| T-15 | Synthetic generator | M1 | todo | |
+| T-16 | Fake model [FR-10] | M2 | todo | |
+| T-17 | Scripted harness [FR-10] | M2 | todo | |
+| T-18 | Custom tools [FR-7] | M2 | todo | |
+| T-19 | Mode A launcher and approvals [FR-4] | M2 | todo | |
+| T-20 | Worktree manager [FR-4] | M2 | todo | |
+| T-21 | Mode B wrapper and maintainer scripts [FR-5] | M2 | todo | |
+| T-22 | Local model and dual review [FR-6] | M2 | todo | |
+| T-23 | Threads and turns API [FR-8] | M3 | todo | |
+| T-24 | Events and SSE relay [FR-14] | M3 | todo | |
+| T-25 | Usage meter [FR-12] | M3 | todo | |
+| T-26 | Credit guard [FR-12] | M3 | todo | |
+| T-27 | Approvals queue [FR-11] | M3 | todo | |
+| T-28 | Recovery supervisor [FR-10] | M3 | todo | |
+| T-29 | Bridge transport [FR-8] | M3 | todo | |
+| T-30 | Bridge tools [FR-8] | M3 | todo | |
+| T-31 | Doctor [FR-13] | M3 | todo | |
+| T-32 | Claude Code plugin and Cursor config [FR-9] | M3 | todo | |
+| T-33 | Host units and CLI [FR-10] | M3 | todo | |
+| T-34 | Dashboard scaffold [FR-14] | M4 | todo | |
+| T-35 | Overview, Usage, Doctor [FR-14] | M4 | todo | |
+| T-36 | Threads, timeline, lineage, artifacts [FR-14] | M4 | todo | |
+| T-37 | Approvals screen [FR-11] | M4 | todo | |
+| T-38 | E2E and accessibility [FR-14] | M4 | todo | |
+| T-39 | Eval runner | M5 | todo | |
+| T-40 | Durability suite [FR-10] | M5 | todo | |
+| T-41 | Delegation suite [FR-8] | M5 | todo | |
+| T-42 | Policy suite [FR-13] | M5 | todo | |
+| T-43 | Credit suite [FR-12] | M5 | todo | |
+| T-44 | Live guard and dual-review suite | M5 | todo | |
+| T-45 | Telemetry | M6 | todo | |
+| T-46 | Threat model and injection tests | M6 | todo | |
+| T-47 | Images and compose | M7 | todo | |
+| T-48 | Workflows | M7 | todo | |
+| T-49 | Documentation and ADRs | M8 | todo | |
+| T-50 | Demo | M8 | todo | |
+| T-51 | Reviews and fixes | M9 | todo | |
+| T-52 | Final verification | M9 | todo | |
+
+## Global Definition of Done
+
+- [ ] `make verify` passes from a fresh clone (§19) with no API keys set.
+- [ ] `docker compose up -d --wait` brings every service to healthy; `make seed` and `make demo` run the scripted scenario end to end.
+- [ ] `make test-docker` runs the full test suite inside containers and passes.
+- [ ] Unit, integration, contract and E2E suites pass; line coverage is at least 85% on core packages and 70% overall.
+- [ ] Offline evals meet every threshold in §11, and `evals/REPORT.md` is generated by script from the latest run.
+- [ ] Lint, format and type checks are clean.
+- [ ] Security scans report no high or critical findings, or each one is documented with a reason in `docs/security.md`.
+- [ ] Every workflow in §17 exists and passes actionlint; if a GitHub remote exists and CI results can be observed, the pushed branch is green.
+- [ ] Every screen in §13 is implemented with loading, empty, error and success states; axe reports no serious violations; Playwright captured the screenshots in `docs/images/`.
+- [ ] The harness in §7 is complete: CLAUDE.md, AGENTS.md, settings, hooks with passing tests, rules, subagents, skills and `.mcp.json`.
+- [ ] Every document in §18 exists, and every number in the README points to the command or report that produced it.
+- [ ] The `reviewer` subagent's final verdict is "ship", and `security-review` findings are fixed or documented.
+- [ ] `PROGRESS.md` has every task checked with evidence, and `docs/KNOWN_LIMITATIONS.md` lists what is not done.
+- [ ] Every commit is authored and committed by the maintainer, and no commit message or pull request contains `Co-Authored-By`, `Claude-Session` or "Generated with Claude Code" (checked as in §19).
+- [ ] `BUILD.md` lives at `docs/specs/000-build-spec.md`; all work is committed, and pushed when a remote exists.
+- [ ] Every FR-1 to FR-14 has a passing named test and a task marked done.
+- [ ] `make doctor` passes on the compose stack; `docs/exo-verification.md` covers V-1 to V-11.
+- [ ] No API key, sign-in command, non-loopback bind or live CI call (`make security`, `tests/integration/loopback.test.ts`).
+- [ ] NFR budgets pass in `make bench`; Mode B status is stated in README and `docs/KNOWN_LIMITATIONS.md`.
+- [ ] Model usage log complete, and Fable invocations ≤ `BUILD_FABLE_BUDGET` (2).
+
+## Model usage
+
+Every `opus` and `fable` delegation is logged here (BUILD.md, Model routing). Main session: `sonnet`, effort `high`.
+
+| Date | Task | Role | Model | Effort | Reason | Outcome |
+|---|---|---|---|---|---|---|

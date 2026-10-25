@@ -29,3 +29,16 @@ test-results/
 .DS_Store
 .idea/
 .vscode/
+# exo-agent-stack (BUILD.md §1.2)
+.env.*
+!.env.example
+.exos-state/
+vendor/exo/target/
+evals/reports/*.json
+!evals/reports/baseline*.json
+# Google Drive sync artefacts
+*.gdoc
+Icon?
+.tmp.drivedownload*
+# local-only Claude Code overrides
+.claude/settings.local.json

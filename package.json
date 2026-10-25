@@ -1,0 +1,20 @@
+{
+  "name": "exo-agent-stack",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Personal self-hosted agent stack on Exo: durable threads, sandboxes, vaults, policies and an MCP bridge.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test:harness": "vitest run tests/harness"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
