@@ -77,7 +77,7 @@ const FRONT = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const collapse = (s: string): string => s.replace(/\s+/g, " ").trim();
 
 /** The host of a URL without its port, or null when it is not a URL. */
-function hostOf(url: string): string | null {
+export function hostOf(url: string): string | null {
   try {
     return new URL(url).host.replace(/:\d+$/, "");
   } catch {

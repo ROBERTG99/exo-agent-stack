@@ -152,12 +152,13 @@ doctor: ## exos doctor --json, exit 1 on any fail
 	$(call NOT_YET,T-31)
 
 .PHONY: agents-lint
-agents-lint: ## Lint agent definitions
+agents-lint: ## Lint agent definitions (hand-written and generated)
 	$(PNPM) exec tsx cli/src/main.ts agents lint agents
+	@if [ -d agents/generated ]; then $(PNPM) exec tsx cli/src/main.ts agents lint agents/generated; fi
 
 .PHONY: agents-render
 agents-render: ## Render generated agent definitions
-	$(call NOT_YET,T-11)
+	$(PNPM) exec tsx scripts/agents-render.ts
 
 .PHONY: agents-sync
 agents-sync: ## Sync agent definitions into Exo
