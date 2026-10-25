@@ -1,11 +1,14 @@
 import { existsSync, statSync } from "node:fs";
 import { agentFiles, lintAgentDir } from "@exos/doctor/agent-schema";
 import type { CommandIo } from "../main.ts";
+import { runAgentsSync } from "./agents-sync.ts";
 
-const USAGE = "usage: exos agents lint [dir] [--no-paths] [--online]";
+const USAGE =
+  "usage: exos agents lint [dir] [--no-paths] [--online] | exos agents sync [--agents dir] [--state file] [--dry-run] [--json]";
 
 /** `exos agents lint [dir]`: exit 0 clean, 1 on diagnostics, 2 on usage errors or a missing directory. */
-export function agentsCommand(args: string[], io: CommandIo): number {
+export async function agentsCommand(args: string[], io: CommandIo): Promise<number> {
+  if (args[0] === "sync") return runAgentsSync(args.slice(1), io);
   if (args[0] !== "lint") {
     io.err(USAGE);
     return 2;

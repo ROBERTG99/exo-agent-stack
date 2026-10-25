@@ -79,3 +79,9 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 - **What:** `environments/allowlists.yaml` gives `reviewer-cursor` an empty host list, because its hosts must be read from the pinned `exoharness/typescript/cursor/sdk.ts` (verification item V-15), which is not available. Nothing is guessed. In a sandbox that agent has no network until the list is filled in. The environment format (`environments/*.yaml`) is this stack's own description; the `exo environment create|update` calls that apply it are unverified.
 - **Not written:** the host-only test `tests/integration/exo/network-policy.test.ts` ("a sandbox for repo-builder-b that connects to example.org is refused"). It needs a real Exo and SmolVM, and writing its body without either would be guesswork.
 - **Closes when:** T-09 reads the Cursor SDK hosts and the `exo environment` flags; the maintainer's host (with SmolVM) runs the network test.
+
+## Agent sync: the request body for Exo is a best reading of the spec (V-11)
+
+- **What:** `exos agents sync` creates agents with `POST /exo/agent/managed` and updates them with `PUT /exo/agent/{id}/definition` (BUILD.md §4.2). The spec says only that the body is "built from the parsed Markdown" (V-11). `managedAgentBody` sends `{slug, definition, instructions}` with the definition's relative paths made absolute, and is the only code that changes when V-11 is verified. Idempotence does not depend on that shape: a state file keeps the sha256 of each body and the agent id, and Exo's own agent list decides whether an agent still exists.
+- **Tested against:** an in-process Exo double with the same endpoints (14 tests). Not tested against a real Exo.
+- **Count:** the catalogue has seven agents (FR-2's "7 unchanged"). The generated `dual-review-cursor` fallback is synced as well, so a second run reports 8 unchanged, the seven catalogue names among them.

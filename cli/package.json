@@ -10,6 +10,7 @@
     "@exos/common": "workspace:*",
     "@exos/stackd": "workspace:*",
     "zod": "^4.6.7",
-    "@exos/doctor": "workspace:*"
+    "@exos/doctor": "workspace:*",
+    "@exos/exo-client": "workspace:*"
   }
 }

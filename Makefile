@@ -162,7 +162,7 @@ agents-render: ## Render generated agent definitions
 
 .PHONY: agents-sync
 agents-sync: ## Sync agent definitions into Exo
-	$(call NOT_YET,T-13)
+	$(PNPM) exec tsx cli/src/main.ts agents sync
 
 .PHONY: host-up
 host-up: ## Native Exo, stackd and bridge

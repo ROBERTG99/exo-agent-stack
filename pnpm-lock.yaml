@@ -83,6 +83,9 @@ importers:
       '@exos/doctor':
         specifier: workspace:*
         version: link:../doctor
+      '@exos/exo-client':
+        specifier: workspace:*
+        version: link:../packages/exo-client
       '@exos/stackd':
         specifier: workspace:*
         version: link:../stackd

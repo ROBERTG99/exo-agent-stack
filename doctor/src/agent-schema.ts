@@ -270,6 +270,23 @@ export function lintAgentText(text: string, opts: LintOptions): Diagnostic[] {
   return out.sort((a, b) => a.line - b.line || a.rule.localeCompare(b.rule));
 }
 
+export interface ParsedAgent {
+  /** The front matter as plain data. */
+  front: Record<string, unknown>;
+  /** The Markdown after the front matter, exactly as written. */
+  body: string;
+}
+
+/** Splits a definition into front matter data and body. Throws for a file that does not lint to that point. */
+export function parseAgentText(text: string, file = "agent.md"): ParsedAgent {
+  const m = FRONT.exec(text);
+  if (!m) throw new Error(`${file}: no YAML front matter`);
+  const doc = parseDocument(m[1]!);
+  if (doc.errors.length > 0)
+    throw new Error(`${file}: invalid YAML (${doc.errors[0]!.message.split("\n")[0]})`);
+  return { front: (doc.toJS() ?? {}) as Record<string, unknown>, body: m[2]! };
+}
+
 export function lintAgentFile(file: string, opts: { checkPaths?: boolean } = {}): Diagnostic[] {
   return lintAgentText(readFileSync(file, "utf8"), { file, checkPaths: opts.checkPaths });
 }
