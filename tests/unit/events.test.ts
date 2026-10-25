@@ -119,3 +119,25 @@ describe("viewOf fields", () => {
     expect(ev("tool_requested", { name: INJECTION }).tool).toBeUndefined();
   });
 });
+
+describe("viewOf identifiers for the bridge", () => {
+  it("gives an approval request its id and a tool call its call id, only when they are plain tokens", () => {
+    expect(
+      ev("agent_runtime.approval_requested", { tool: "claude.Edit", approval_id: "apr_7" })
+        .request_id,
+    ).toBe("apr_7");
+    expect(
+      ev("agent_runtime.approval_requested", { tool: "claude.Edit", approval_id: INJECTION })
+        .request_id,
+    ).toBeUndefined();
+    expect(
+      ev("frontend_tool_requested", { name: "ask_user", call_id: "call_9" }).tool_call_id,
+    ).toBe("call_9");
+    expect(
+      ev("frontend_tool_requested", { name: "ask_user", tool_call_id: "call_8" }).tool_call_id,
+    ).toBe("call_8");
+    expect(ev("tool_requested", { name: "t", call_id: "call_1" }).tool_call_id).toBe("call_1");
+    expect(ev("tool_requested", { name: "t", call_id: INJECTION }).tool_call_id).toBeUndefined();
+    expect(ev("messages", { role: "user", text: "x" }).request_id).toBeUndefined();
+  });
+});

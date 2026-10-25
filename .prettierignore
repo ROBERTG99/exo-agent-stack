@@ -16,3 +16,4 @@ test-results
 evals/datasets
 fixtures/review-target
 fixtures/build-templates
+bridge/schemas/tools.v1.json

@@ -310,3 +310,60 @@ describe("threads: status, list, turns, cancel, fork", () => {
     expect(at.body.code).toBe("fork_at_unsupported");
   });
 });
+
+describe("GET /api/v1/threads/resolve", () => {
+  it("finds a thread by slug or id, with or without the agent", async () => {
+    const s = await stack();
+    const a = await s.call("POST", "/api/v1/threads", start());
+    const b = await s.call(
+      "POST",
+      "/api/v1/threads",
+      start({ agent: "reviewer-cursor", idempotency_key: "key-0000-other-0001" }),
+    );
+    const bySlug = await s.call("GET", `/api/v1/threads/resolve?thread=${a.body.thread_slug}`);
+    expect(bySlug.status).toBe(200);
+    expect(bySlug.body.matches).toEqual([
+      {
+        agent_id: a.body.agent_id,
+        agent_slug: "repo-builder",
+        thread_id: a.body.thread_id,
+        thread_slug: a.body.thread_slug,
+      },
+    ]);
+    const byId = await s.call("GET", `/api/v1/threads/resolve?thread=${b.body.thread_id}`);
+    expect(byId.body.matches.map((m: { agent_slug: string }) => m.agent_slug)).toEqual([
+      "reviewer-cursor",
+    ]);
+    const qualified = await s.call(
+      "GET",
+      `/api/v1/threads/resolve?thread=repo-builder/${a.body.thread_slug}`,
+    );
+    expect(qualified.body.matches).toHaveLength(1);
+    expect(
+      (await s.call("GET", "/api/v1/threads/resolve?thread=reviewer-cursor/" + a.body.thread_slug))
+        .body.matches,
+    ).toEqual([]);
+  });
+
+  it("returns an empty list for an unknown thread, and several matches when a slug is shared", async () => {
+    const s = await stack();
+    expect((await s.call("GET", "/api/v1/threads/resolve?thread=nope")).body.matches).toEqual([]);
+    const agents = await s.exo.listAgents();
+    for (const slug of ["repo-builder", "reviewer-cursor"]) {
+      const agent = agents.find((x) => x.slug === slug)!;
+      await s.exo.createThread(agent.id, { vaults: [], thread_slug: "shared-slug" });
+    }
+    const r = await s.call("GET", "/api/v1/threads/resolve?thread=shared-slug");
+    expect(r.body.matches.map((m: { agent_slug: string }) => m.agent_slug).sort()).toEqual([
+      "repo-builder",
+      "reviewer-cursor",
+    ]);
+  });
+
+  it("validates the query and needs the token", async () => {
+    const s = await stack();
+    expect((await s.call("GET", "/api/v1/threads/resolve")).status).toBe(400);
+    expect((await s.call("GET", "/api/v1/threads/resolve?thread=")).status).toBe(400);
+    expect((await fetch(`${s.url}/api/v1/threads/resolve?thread=x`)).status).toBe(401);
+  });
+});

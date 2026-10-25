@@ -212,6 +212,37 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
     return reply.code(replayed ? 200 : 201).send({ ...value, replayed });
   });
 
+  // GET /threads/resolve?thread=<agent>/<thread> | <slug or id>: who a thread reference means.
+  app.get("/api/v1/threads/resolve", pre, async (request) => {
+    const { thread: ref } = z
+      .strictObject({ thread: z.string().min(1).max(257) })
+      .parse(request.query ?? {});
+    const matches: Array<{
+      agent_id: string;
+      agent_slug: string;
+      thread_id: string;
+      thread_slug: string;
+    }> = [];
+    const slash = ref.indexOf("/");
+    const agents = await ctx.agents.list();
+    for (const agent of agents) {
+      if (slash >= 0 && agent.slug !== ref.slice(0, slash) && agent.id !== ref.slice(0, slash))
+        continue;
+      const wanted = slash >= 0 ? ref.slice(slash + 1) : ref;
+      for (const t of await listThreads(ctx.exo, agent.id)) {
+        if (t.slug === wanted || t.id === wanted) {
+          matches.push({
+            agent_id: agent.id,
+            agent_slug: agent.slug,
+            thread_id: t.id,
+            thread_slug: t.slug,
+          });
+        }
+      }
+    }
+    return { matches };
+  });
+
   app.get("/api/v1/threads/:agent/:thread", pre, async (request) => {
     const { agent: a, thread: t } = request.params as { agent: string; thread: string };
     const { agent, thread } = await resolveThread(ctx, a, t);

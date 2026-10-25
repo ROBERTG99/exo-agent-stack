@@ -1,6 +1,9 @@
-// The nine bridge tools (BUILD.md §4.6) are registered here (T-30).
+// The nine bridge tools (BUILD.md §4.6).
 import type { Register } from "../mcp.ts";
+import { registerReads } from "./reads.ts";
+import { registerWrites } from "./writes.ts";
 
-export const registerTools: Register = () => {
-  /* added with the tools in T-30 */
+export const registerTools: Register = (server, ctx) => {
+  registerReads(server, ctx);
+  registerWrites(server, ctx);
 };

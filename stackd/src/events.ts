@@ -13,6 +13,10 @@ export interface EventView {
   session_id: string | null;
   summary: string;
   tool?: string;
+  /** The id to pass to the approvals API for an approval request. */
+  request_id?: string;
+  /** The id of the tool call, for answering a question the agent asked. */
+  tool_call_id?: string;
   untrusted_text?: string;
   usage?: Record<string, number | string>;
   /** The event as Exo sent it. Contains agent-written text: treat it as untrusted. */
@@ -102,10 +106,13 @@ export function viewOf(event: ExoEvent): EventView {
       if (body) view.untrusted_text = body;
       break;
     }
-    case "tool_requested":
+    case "tool_requested": {
       view.summary = `tool requested: ${tool ?? "unknown"}`;
       if (tool) view.tool = tool;
+      const call = token(e.call_id) ?? token(e.tool_call_id);
+      if (call) view.tool_call_id = call;
       break;
+    }
     case "tool_result": {
       view.summary = `tool result: ${tool ?? "unknown"}`;
       if (tool) view.tool = tool;
@@ -130,16 +137,21 @@ export function viewOf(event: ExoEvent): EventView {
     case "sandbox_snapshotted":
       view.summary = "sandbox snapshotted";
       break;
-    case "agent_runtime.approval_requested":
+    case "agent_runtime.approval_requested": {
       view.summary = `approval requested: ${tool ?? "unknown"}`;
       if (tool) view.tool = tool;
+      const request = token(e.approval_id);
+      if (request) view.request_id = request;
       break;
+    }
     case "agent_runtime.approval_response":
       view.summary = e.approved === true ? "approval granted" : "approval denied";
       break;
     case "frontend_tool_requested": {
       view.summary = `question for the human (${tool ?? "unknown"})`;
       if (tool) view.tool = tool;
+      const call = token(e.call_id) ?? token(e.tool_call_id);
+      if (call) view.tool_call_id = call;
       const args = e.arguments as Record<string, unknown> | undefined;
       const question = text(args?.question);
       if (question) view.untrusted_text = question;
