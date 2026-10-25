@@ -191,3 +191,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 
 - **Decision:** an unquoted `{` or `}` makes a command not provably safe (brace expansion can build `../x` or `/etc/passwd` from a word that looks local), as does an unquoted `*`, `?` or `[` in a word with a path segment that starts with a dot (`.*` matches `..`), and `printf` with any leading option (`-v` assigns a shell variable). Quoted braces and globs are literal and stay allowed, as do plain patterns such as `src/*.ts`.
 - **Evidence:** 188 cases in `tests/unit/shell-safety.test.ts`; found by the third automated security review of the same file.
+
+## 2026-10-25 · Bridge transports (T-29)
+
+- **Decision:** the bridge is a stateless MCP server: one `McpServer` and transport per HTTP request (`POST /mcp` only; GET and DELETE answer 405), so nothing is held between calls and a stackd or bridge restart loses no session. Every HTTP request is checked in this order before an MCP message is read: Host (loopback name on the bridge port), Origin (absent, or loopback on the bridge port), bearer token; the health probe needs no token but still checks Host. The bridge uses the API token only and has no way to obtain the dashboard token. stdio reads the token from `EXOS_LOCAL_TOKEN` or `<state dir>/local-token`, prints nothing to stdout except protocol messages, and reports errors on stderr without the token.
+- **Why:** BUILD.md §4.6 and §15 (DNS-rebinding and CSRF defences, loopback only) and NFR-8 (limits).
+- **Next:** the tools and the call limiter's use (`rate_limited`) are in T-30; `scripts/bundle.mjs bridge` also builds the stdio entry used by `.mcp.json`.

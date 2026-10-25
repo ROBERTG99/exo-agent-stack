@@ -1,0 +1,22 @@
+{
+  "name": "@exos/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./server": "./src/server.ts",
+    "./limits": "./src/limits.ts",
+    "./auth": "./src/auth.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "stdio": "tsx src/stdio.ts",
+    "build": "node ../scripts/bundle.mjs bridge"
+  },
+  "dependencies": {
+    "@exos/common": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "fastify": "^5.0.0",
+    "zod": "^4.6.7"
+  }
+}
