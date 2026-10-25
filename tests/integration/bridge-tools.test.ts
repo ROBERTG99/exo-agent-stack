@@ -452,6 +452,78 @@ describe("exo_approve and exo_answer", () => {
   });
 });
 
+describe("a slug shared by two agents never crosses over", () => {
+  /** Two threads with the same slug on different agents; only repo-builder's has anything open. */
+  async function sharedSlug(s: Stack, prompt: string) {
+    const agents = await s.exo.listAgents();
+    const [a, b] = ["repo-builder", "reviewer-cursor"].map((slug) =>
+      agents.find((x) => x.slug === slug)!,
+    );
+    const threadA = (await s.exo.createThread(a!.id, { vaults: [], thread_slug: "shared" }))
+      .thread as any;
+    await s.exo.createThread(b!.id, { vaults: [], thread_slug: "shared" });
+    const turn = await s.exo.submitTurn(a!.id, threadA.id, {
+      input: prompt,
+      frontend_tools: [{ name: "ask_user" }],
+    });
+    return { threadA, turn: turn.turn as any };
+  }
+
+  it("will not answer another agent's question that has the same thread slug", async () => {
+    const { s, call } = await setup();
+    const { threadA } = await sharedSlug(s, "[[scenario:ask-user]] ask");
+    const q = await until(async () => {
+      const list = (await s.call("GET", "/api/v1/approvals")).body.approvals as any[];
+      return list.find((x) => x.kind === "frontend");
+    }, "the question");
+    const wrong = await call("exo_answer", {
+      thread: "reviewer-cursor/shared",
+      tool_call_id: q.call_id,
+      answer: "no",
+      idempotency_key: key(),
+    });
+    expect(wrong).toMatchObject({ isError: true, data: { code: "not_found" } });
+    expect(s.sim.store.pendingByCall("frontend", threadA.id, q.call_id)!.status).toBe("pending");
+    const right = await call("exo_answer", {
+      thread: "repo-builder/shared",
+      tool_call_id: q.call_id,
+      answer: "staging",
+      idempotency_key: key(),
+    });
+    expect(right.isError).toBe(false);
+  });
+
+  it("will not approve another agent's request that has the same thread slug", async () => {
+    const { s, call } = await setup();
+    const agents = await s.exo.listAgents();
+    const a = agents.find((x) => x.slug === "repo-builder")!;
+    const b = agents.find((x) => x.slug === "reviewer-cursor")!;
+    const threadA = (await s.exo.createThread(a.id, { vaults: [], thread_slug: "shared" }))
+      .thread as any;
+    await s.exo.createThread(b.id, { vaults: [], thread_slug: "shared" });
+    await s.exo.submitTurn(a.id, threadA.id, { input: "[[scenario:approval-edit]] edit" });
+    const row = await until(
+      async () => ((await s.call("GET", "/api/v1/approvals")).body.approvals as any[])[0],
+      "the approval",
+    );
+    const wrong = await call("exo_approve", {
+      thread: "reviewer-cursor/shared",
+      request_id: row.approval_id,
+      decision: "approve",
+      idempotency_key: key(),
+    });
+    expect(wrong).toMatchObject({ isError: true, data: { code: "not_found" } });
+    expect(s.sim.store.pending(row.approval_id)!.status).toBe("pending");
+    const right = await call("exo_approve", {
+      thread: "repo-builder/shared",
+      request_id: row.approval_id,
+      decision: "approve",
+      idempotency_key: key(),
+    });
+    expect(right.isError).toBe(false);
+  });
+});
+
 describe("limits", () => {
   it("stops at the call limit with rate_limited and a time to wait, then recovers", async () => {
     let now = 0;

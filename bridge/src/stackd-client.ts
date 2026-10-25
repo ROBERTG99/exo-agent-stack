@@ -50,12 +50,20 @@ export async function stackd<T = Record<string, unknown>>(
 export interface ThreadRef {
   agent: string;
   thread: string;
+  /** Ids are what scope a call: a slug can be shared by threads of two agents. */
+  agent_id: string;
+  thread_id: string;
 }
 
 /** `<agent>/<slug>`, a unique slug or an id, to the one thread it names. */
 export async function resolveThread(ctx: BridgeContext, ref: string): Promise<ThreadRef> {
   const { matches } = await stackd<{
-    matches: Array<{ agent_slug: string; thread_slug: string }>;
+    matches: Array<{
+      agent_id: string;
+      agent_slug: string;
+      thread_id: string;
+      thread_slug: string;
+    }>;
   }>(ctx, { path: "/api/v1/threads/resolve", query: { thread: ref } });
   if (matches.length === 0)
     throw new BridgeError("not_found", `no thread matches "${ref.slice(0, 80)}"`);
@@ -68,5 +76,11 @@ export async function resolveThread(ctx: BridgeContext, ref: string): Promise<Th
       },
     );
   }
-  return { agent: matches[0]!.agent_slug, thread: matches[0]!.thread_slug };
+  const m = matches[0]!;
+  return {
+    agent: m.agent_slug,
+    thread: m.thread_slug,
+    agent_id: m.agent_id,
+    thread_id: m.thread_id,
+  };
 }

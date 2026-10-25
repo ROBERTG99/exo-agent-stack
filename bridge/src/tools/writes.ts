@@ -104,7 +104,12 @@ export function registerWrites(server: McpServer, ctx: BridgeContext): void {
     const r = await stackd<{ recorded_event_id: string | null; replayed?: boolean }>(c, {
       method: "POST",
       path: `/api/v1/frontend-tools/${encodeURIComponent(args.tool_call_id)}:answer`,
-      body: { answer: args.answer, thread: ref.thread, idempotency_key: args.idempotency_key },
+      body: {
+        answer: args.answer,
+        thread: ref.thread_id,
+        agent: ref.agent_id,
+        idempotency_key: args.idempotency_key,
+      },
     });
     return {
       data: { recorded_event_id: r.recorded_event_id, replayed: r.replayed ?? false },
@@ -116,9 +121,20 @@ export function registerWrites(server: McpServer, ctx: BridgeContext): void {
     const ref = await resolveThread(c, args.thread);
     // The request must belong to this thread, and still be open.
     const { approvals } = await stackd<{
-      approvals: Array<{ approval_id: string; decision: string; kind: string }>;
-    }>(c, { path: "/api/v1/approvals", query: { state: "all", thread: ref.thread } });
-    const row = approvals.find((a) => a.approval_id === args.request_id);
+      approvals: Array<{
+        approval_id: string;
+        decision: string;
+        kind: string;
+        agent_id: string;
+        thread_id: string;
+      }>;
+    }>(c, { path: "/api/v1/approvals", query: { state: "all", thread: ref.thread_id } });
+    const row = approvals.find(
+      (a) =>
+        a.approval_id === args.request_id &&
+        a.agent_id === ref.agent_id &&
+        a.thread_id === ref.thread_id,
+    );
     if (!row)
       throw new BridgeError(
         "not_found",

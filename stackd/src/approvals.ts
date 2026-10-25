@@ -191,25 +191,33 @@ export class ApprovalQueue {
   }
 
   /** The open frontend questions for a tool call id (ids are only unique within a thread). */
-  frontendByCall(callId: string, thread?: string): ApprovalRow[] {
+  frontendByCall(callId: string, thread?: string, agent?: string): ApprovalRow[] {
     return (
       this.o.db
         .prepare(
           "SELECT * FROM approvals WHERE kind = 'frontend' AND call_id = ? AND decision IN ('pending', 'dashboard_only')",
         )
         .all(callId) as ApprovalRow[]
-    ).filter((r) => !thread || r.thread_id === thread || r.thread_slug === thread);
+    ).filter(
+      (r) =>
+        (!thread || r.thread_id === thread || r.thread_slug === thread) &&
+        (!agent || r.agent_id === agent),
+    );
   }
 
   /** The most recently answered question for a tool call id (to find its thread after a retry). */
-  frontendAnswered(callId: string, thread?: string): ApprovalRow | undefined {
+  frontendAnswered(callId: string, thread?: string, agent?: string): ApprovalRow | undefined {
     return (
       this.o.db
         .prepare(
           "SELECT * FROM approvals WHERE kind = 'frontend' AND call_id = ? AND decision = 'approved' ORDER BY decided_at DESC",
         )
         .all(callId) as ApprovalRow[]
-    ).find((r) => !thread || r.thread_id === thread || r.thread_slug === thread);
+    ).find(
+      (r) =>
+        (!thread || r.thread_id === thread || r.thread_slug === thread) &&
+        (!agent || r.agent_id === agent),
+    );
   }
 
   /** Marks an open row decided; false if someone else decided it first. */

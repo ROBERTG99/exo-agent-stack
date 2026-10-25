@@ -22,7 +22,9 @@ const decideBody = z.strictObject({
 });
 const answerBody = z.strictObject({
   answer: z.string().min(1).max(8000),
+  /** The thread id or slug; with `agent` it is unambiguous. */
   thread: z.string().min(1).max(128).optional(),
+  agent: z.string().min(1).max(128).optional(),
   idempotency_key: KEY.optional(),
 });
 
@@ -252,17 +254,17 @@ export function registerApprovalRoutes(
       save: (more: Json) => void = () => undefined,
     ): Promise<Json> => {
       if (progress.answered === true) {
-        const done = queue.frontendAnswered(callId, body.thread);
+        const done = queue.frontendAnswered(callId, body.thread, body.agent);
         return {
           recorded_event_id: done
             ? await latestEventId(done.agent_id, done.thread_id, "frontend_tool_result")
             : null,
         };
       }
-      let rows = queue.frontendByCall(callId, body.thread);
+      let rows = queue.frontendByCall(callId, body.thread, body.agent);
       if (rows.length === 0) {
         await syncQuietly();
-        rows = queue.frontendByCall(callId, body.thread);
+        rows = queue.frontendByCall(callId, body.thread, body.agent);
       }
       if (rows.length === 0) throw notFound(`open question ${callId}`);
       if (rows.length > 1) {
