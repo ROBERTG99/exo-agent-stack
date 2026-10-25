@@ -62,14 +62,65 @@ function stripPrefix(segment) {
   for (;;) {
     const next = s
       .replace(/^(?:sudo|command|exec|nohup|time|env)\s+/, "")
-      .replace(/^timeout\s+\S+\s+/, "")
-      .replace(/^xargs\s+(?:-\S+\s+)*/, "")
+      .replace(
+        /^timeout\s+(?:(?:-s|-k|--signal|--kill-after)(?:=|\s+)\S+\s+|-{1,2}[A-Za-z-]+(?:=\S+)?\s+)*\d+(?:\.\d+)?[smhd]?\s+/,
+        "",
+      )
+      .replace(/^xargs\s+(?:(?:-[IiLlnPdaEesJ]\s*\S+|--\S+|-[0rtpx]+)\s+)*/, "")
       .replace(/^-u\s+\S+\s+/, "")
       .replace(/^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "");
     // Also drop the directory of the command itself so /opt/homebrew/bin/claude matches `claude`.
     if (next === s) return s.replace(/^\S*\/(?=[^/\s]+(?:\s|$))/, "");
     s = next;
   }
+}
+
+/** Bodies of $(...), <(...) and >(...), with nesting; single-quoted text is skipped. */
+function balancedSubstitutions(command) {
+  const out = [];
+  for (let i = 0; i < command.length; i++) {
+    if (command[i] === "'") {
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) break;
+      i = end;
+      continue;
+    }
+    if (
+      (command[i] === "$" || command[i] === "<" || command[i] === ">") &&
+      command[i + 1] === "("
+    ) {
+      let depth = 1;
+      let j = i + 2;
+      for (; j < command.length && depth > 0; j++) {
+        if (command[j] === "(") depth++;
+        else if (command[j] === ")") depth--;
+      }
+      if (depth === 0) out.push(command.slice(i + 2, j - 1));
+      else out.push(command.slice(i + 2)); // unbalanced: still inspect what follows
+    }
+  }
+  return out;
+}
+
+const HEREDOC = /<<-?[ \t]*(["']?)([A-Za-z_]\w*)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?=\n|$)/g;
+
+/**
+ * Separates heredoc bodies from the command text. A quoted heredoc (<<'EOF') is literal data; an
+ * unquoted one still undergoes $(...) and backtick expansion, so only its substitutions matter.
+ * Neither body is a sequence of commands, so segment analysis must not see them.
+ */
+function splitHeredocs(command) {
+  const bodies = [];
+  const code = command.replace(HEREDOC, (match, quote, _tag, body) => {
+    bodies.push({ quoted: quote !== "", text: body });
+    return match.slice(0, match.indexOf("\n"));
+  });
+  return { code, bodies };
+}
+
+/** Replaces the inside of single-quoted strings with spaces (they are never expanded by the shell). */
+function maskSingleQuoted(text) {
+  return text.replace(/'[^']*'/g, (m) => " ".repeat(m.length));
 }
 
 /** Command strings hidden inside bash -c, eval, $(...) and backticks, so indirection cannot dodge the rules. */
@@ -84,8 +135,8 @@ function nestedCommands(command) {
   for (const m of command.matchAll(shell)) out.push(unquote(m[1]));
   for (const m of command.matchAll(new RegExp(String.raw`\beval\s+${quoted}`, "g")))
     out.push(unquote(m[1]));
-  for (const m of command.matchAll(/\$\(([^()]*)\)/g)) out.push(m[1]);
-  for (const m of command.matchAll(/`([^`]*)`/g)) out.push(m[1]);
+  out.push(...balancedSubstitutions(command));
+  for (const m of maskSingleQuoted(command).matchAll(/`([^`]*)`/g)) out.push(m[1]);
   return out;
 }
 
@@ -144,14 +195,19 @@ function bashRules(command, depth = 0) {
     );
   }
 
+  const { code, bodies } = splitHeredocs(command);
   if (depth < 3) {
-    for (const inner of nestedCommands(command)) {
+    const nested = [
+      ...nestedCommands(code),
+      ...bodies.filter((b) => !b.quoted).flatMap((b) => nestedCommands(b.text)),
+    ];
+    for (const inner of nested) {
       const verdict = bashRules(inner, depth + 1);
       if (verdict) return verdict;
     }
   }
 
-  for (const raw of segments(command)) {
+  for (const raw of segments(code)) {
     const seg = stripPrefix(raw);
     const word = firstWord(seg);
 
@@ -179,9 +235,18 @@ function bashRules(command, depth = 0) {
       );
     }
     if (/^git\b/.test(seg)) {
-      const tokens = seg.split(/\s+/);
-      if (tokens.includes("push")) {
-        const destructive = tokens.some(
+      const tokens = seg.split(/\s+/).map((t) => t.replace(/^["'`(]+|["'`);&]+$/g, ""));
+      // The subcommand is the first word after git's global options (-C <dir>, -c k=v, --git-dir=...).
+      let at = 1;
+      while (at < tokens.length && tokens[at].startsWith("-")) {
+        const takesArg = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"];
+        at += takesArg.includes(tokens[at]) ? 2 : 1;
+      }
+      const sub = tokens[at];
+      // If the subcommand cannot be determined, fall back to the loose "push anywhere" reading.
+      const pushTokens = sub === "push" ? tokens.slice(at + 1) : sub === undefined ? tokens : null;
+      if (pushTokens && (sub === "push" || tokens.includes("push"))) {
+        const destructive = pushTokens.some(
           (t) =>
             ["--force", "--force-with-lease", "--delete", "--mirror", "--prune"].includes(t) ||
             t.startsWith("--force-with-lease=") ||
@@ -250,8 +315,8 @@ function bashRules(command, depth = 0) {
         }
       }
     }
-    if (word === "docker" || word === "docker-compose") {
-      if (/(?:^|\s)(?:-P|--publish-all)\b/.test(seg)) {
+    if ((word === "docker" || word === "docker-compose") && /\b(?:run|create)\b/.test(seg)) {
+      if (/(?:^|\s)(?:-[A-Za-z]*P[A-Za-z]*|--publish-all)(?=\s|$)/.test(seg)) {
         return block(
           "loopback-only",
           "Publishing all ports binds every interface; publish explicit 127.0.0.1: ports (rail 3).",
@@ -259,7 +324,7 @@ function bashRules(command, depth = 0) {
       }
       for (const v of [
         ...flagValues(seg, ["--publish"]),
-        ...[...seg.matchAll(/(?:^|\s)-p\s*(\S+)/g)].map((m) => m[1]),
+        ...[...seg.matchAll(/(?:^|\s)-[A-Za-z]*p(?:=|\s*)("[^"]*"|'[^']*'|\S+)/g)].map((m) => m[1]),
       ]) {
         if (!/^["']?(?:127\.0\.0\.1|\[::1\]):/.test(v)) {
           return block(
@@ -272,7 +337,7 @@ function bashRules(command, depth = 0) {
   }
 
   const writeOps = [];
-  for (const raw of segments(command)) {
+  for (const raw of segments(code)) {
     const seg = stripPrefix(raw);
     const word = firstWord(seg);
     const redirect = /(?:>>?|\btee(?:\s+-a)?\s+)\s*["']?(\S+)/g;
