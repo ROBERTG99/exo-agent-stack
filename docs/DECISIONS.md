@@ -25,3 +25,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Decision:** accept whatever `pnpm add` resolves as latest stable (for example vitest 5.0.5, typescript 7.0.2 at T-01) and lock it in `pnpm-lock.yaml`.
 - **Alternatives:** pin older majors known from earlier training data.
 - **Reason:** BUILD.md §5 "Versions: latest stable, locked"; registry output is authoritative over remembered versions.
+
+## 2026-10-25 · Exo repository URL is not in BUILD.md; T-02 blocked on maintainer confirmation
+
+- **Decision:** do not clone `vendor/exo` until the maintainer confirms the URL. Continue with every task that does not need the Exo sources (M0 tooling, fake model, stackd store, generator, ...), build against the §4.2 surface as documented in the spec, and mark everything that needs the pin as blocked.
+- **Alternatives:** (a) clone `https://github.com/exoharness/exo` anyway (found via web search; blocked by the permission classifier, and a wrong guess would pull untrusted code into the tree); (b) invent a `vendor/exo` stub (violates "never fake the missing part").
+- **Reason:** BUILD.md §0.1 rail 8 and §20 (a): a required dependency is unreachable without a trusted source. The fallback in §1.3 covers a failed *build*, not an unknown *source*.

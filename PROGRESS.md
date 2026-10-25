@@ -6,6 +6,7 @@ Single source of progress for the build described in `BUILD.md` (copy: `docs/spe
 
 Nothing here is done by the build agent (BUILD.md §0.1, §1.5). Items are added as the build discovers them.
 
+- [ ] **Confirm the Exo repository URL for `vendor/exo` (blocks T-02, T-09 and everything verified against the pin).** BUILD.md pins commit `f9f012730fd3bf7e061e3e947e01bd6c2bb415e9` but never gives the URL. The build found `https://github.com/exoharness/exo` by web search (public, Rust, MIT, `git ls-remote` works) and tried `git submodule add`, which the permission classifier denied as untrusted code integration. Either allow it (add a `Bash(git submodule add:*)` permission rule or say "yes, use exoharness/exo") or give the correct URL. The unmodified test is saved as `exo-pin.test.ts` for T-02.
 - [ ] Sign in to Claude Code on this Mac (Mode A login).
 - [ ] Run `claude setup-token`, then `scripts/mode-b-store-token.sh` (Mode B; the script stores the token in vault `personal` as `claude-oauth`).
 - [ ] Create a Cursor user key and run `scripts/store-cursor-key.sh`.
@@ -38,7 +39,7 @@ Status: `todo`, `doing`, `done`, `blocked`. Evidence is the command and a one-li
 | ID | Title | Milestone | Status | Evidence |
 |---|---|---|---|---|
 | T-01 | Bootstrap and progress files | M0 | done | `pnpm vitest run tests/harness`: 9 passed (layout.test.ts) |
-| T-02 | Exo submodule and build [FR-1] | M0 | todo | |
+| T-02 | Exo submodule and build [FR-1] | M0 | blocked | `git submodule add https://github.com/exoharness/exo.git vendor/exo` denied by permission classifier (URL found by web search, not in BUILD.md); see Needs the maintainer |
 | T-03 | Workspace, Makefile, env example | M0 | todo | |
 | T-04 | Claude Code harness files | M0 | todo | |
 | T-05 | Hooks | M0 | todo | |
