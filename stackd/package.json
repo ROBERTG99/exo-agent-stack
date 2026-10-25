@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./db": "./src/db/index.ts"
   },
   "scripts": {
     "dev": "tsx src/server.ts",
@@ -12,6 +13,10 @@
   },
   "dependencies": {
     "@exos/common": "workspace:*",
-    "fastify": "^5.0.0"
+    "fastify": "^5.0.0",
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
   }
 }

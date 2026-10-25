@@ -1,0 +1,13 @@
+{
+  "name": "@exos/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "exos": "./src/main.ts"
+  },
+  "dependencies": {
+    "@exos/common": "workspace:*",
+    "@exos/stackd": "workspace:*"
+  }
+}
