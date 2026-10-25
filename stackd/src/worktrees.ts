@@ -137,7 +137,7 @@ export class WorktreeManager {
       const args = branchExists
         ? ["worktree", "add", "--", worktreePath, branch]
         : ["worktree", "add", "-b", branch, "--", worktreePath, "HEAD"];
-      await this.git(repo, args);
+      await this.git(repo, [...(await this.neutralisedFilters(repo)), ...args]);
       try {
         const base = (await this.git(worktreePath, ["rev-parse", "HEAD"])).trim();
         this.db
@@ -235,7 +235,51 @@ export class WorktreeManager {
         `the repository root ${top} is outside the allowed workspace roots`,
       );
     }
+    // `git worktree add` writes metadata into the git directory, which a gitfile or
+    // --separate-git-dir can place anywhere: it must be inside the roots too.
+    for (const flag of [["--absolute-git-dir"], ["--path-format=absolute", "--git-common-dir"]]) {
+      const dir = realpathSync((await this.git(resolved, ["rev-parse", ...flag])).trim());
+      if (!this.allowed(dir)) {
+        throw new WorkspaceNotAllowedError(
+          `the git directory ${dir} is outside the allowed workspace roots`,
+        );
+      }
+    }
     return top;
+  }
+
+  /**
+   * `-c` overrides that disable every filter driver the repository configures. A smudge or process
+   * filter is a command that git runs while checking files out, so an untrusted repository could
+   * otherwise execute code on the host while its worktree is created. `required=false` makes git
+   * carry on with the unfiltered content (for example git-lfs pointer files).
+   */
+  private async neutralisedFilters(repo: string): Promise<string[]> {
+    let listing: string;
+    try {
+      listing = await this.git(repo, [
+        "config",
+        "--get-regexp",
+        "^filter\\..+\\.(smudge|clean|process)$",
+      ]);
+    } catch {
+      return []; // exit status 1: no filter is configured
+    }
+    const drivers = new Set<string>();
+    for (const line of listing.split("\n")) {
+      const name = /^filter\.(.+)\.(?:smudge|clean|process)\s/.exec(line)?.[1];
+      if (name) drivers.add(name);
+    }
+    return [...drivers].flatMap((d) => [
+      "-c",
+      `filter.${d}.smudge=false`,
+      "-c",
+      `filter.${d}.clean=false`,
+      "-c",
+      `filter.${d}.process=false`,
+      "-c",
+      `filter.${d}.required=false`,
+    ]);
   }
 
   private allowed(p: string): boolean {
@@ -261,7 +305,8 @@ export class WorktreeManager {
    */
   private async git(cwd: string, args: string[]): Promise<string> {
     try {
-      const { stdout } = await run("git", ["-c", "core.hooksPath=/dev/null", "-C", cwd, ...args], {
+      const fixed = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
+      const { stdout } = await run("git", [...fixed, "-C", cwd, ...args], {
         env: {
           PATH: process.env.PATH ?? "",
           HOME: process.env.HOME ?? "",

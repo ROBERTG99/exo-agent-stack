@@ -159,6 +159,66 @@ describe("WorktreeManager.create", () => {
   });
 });
 
+describe("a repository's own configuration cannot run code on the host", () => {
+  it("does not run a configured smudge filter while checking out the worktree", async () => {
+    const { repo, root, manager } = setup();
+    const marker = join(root, "filter-ran");
+    const script = join(root, "smudge.sh");
+    writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\ncat\n`);
+    chmodSync(script, 0o755);
+    git(repo, "config", "filter.evil.smudge", script);
+    writeFileSync(join(repo, ".gitattributes"), "*.txt filter=evil\n");
+    writeFileSync(join(repo, "x.txt"), "payload\n");
+    git(repo, "add", ".gitattributes", "x.txt");
+    git(repo, "commit", "-q", "-m", "add filtered file");
+    expect(existsSync(marker)).toBe(false); // the commit itself uses the clean side only
+
+    const w = await manager.create({ threadSlug: "d-9100000001", workspace: repo });
+    expect(existsSync(marker)).toBe(false);
+    expect(readFileSync(join(w.worktree_path, "x.txt"), "utf8")).toBe("payload\n");
+  });
+
+  it("does not run a configured fsmonitor", async () => {
+    const { repo, root, manager } = setup();
+    const marker = join(root, "fsmonitor-ran");
+    const script = join(root, "fsmonitor.sh");
+    writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\n`);
+    chmodSync(script, 0o755);
+    git(repo, "config", "core.fsmonitor", script);
+    await manager.create({ threadSlug: "d-9100000002", workspace: repo });
+    expect(existsSync(marker)).toBe(false);
+  });
+});
+
+describe("git metadata must also live inside the allowed roots", () => {
+  it("rejects a repository whose git directory is elsewhere (gitfile pointing out)", async () => {
+    const { root, db, baseDir } = setup();
+    const gitdirHome = realpathSync(mkdtempSync(join(tmpdir(), "gitdir-")));
+    const repo = join(root, "split");
+    mkdirSync(repo);
+    git(repo, "init", "-q", "-b", "main", "--separate-git-dir", join(gitdirHome, "meta.git"));
+    writeFileSync(join(repo, "f"), "x");
+    git(repo, "add", "f");
+    git(repo, "commit", "-q", "-m", "init");
+    const manager = new WorktreeManager(db, { baseDir, allowedRoots: [root] });
+    await expect(
+      manager.create({ threadSlug: "d-9200000001", workspace: repo }),
+    ).rejects.toMatchObject({
+      code: "workspace_not_allowed",
+    });
+    // Nothing was written into the outside git directory.
+    expect(existsSync(join(gitdirHome, "meta.git", "worktrees"))).toBe(false);
+  });
+
+  it("accepts a workspace that is itself a linked worktree of a repository inside the roots", async () => {
+    const { root, repo, manager } = setup();
+    const linked = join(root, "linked");
+    git(repo, "worktree", "add", "-q", "-b", "side", linked);
+    const w = await manager.create({ threadSlug: "d-9200000002", workspace: linked });
+    expect(existsSync(join(w.worktree_path, "README.md"))).toBe(true);
+  });
+});
+
 describe("workspace validation (workspace_not_allowed)", () => {
   it("rejects a repository outside every allowed root", async () => {
     const { manager } = setup();
