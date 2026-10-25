@@ -158,6 +158,58 @@ describe("usage and the meter", () => {
     expect(usage.body.meter_lag_s).toBeGreaterThanOrEqual(0);
   });
 
+  it("does not count a fork's copy of a finished turn again, before or after the first pass", async () => {
+    const spentMicros = async (s: Stack) =>
+      (
+        s.stackd.db
+          .prepare("SELECT COALESCE(SUM(cost_micros), 0) AS m FROM usage_events")
+          .get() as {
+          m: number;
+        }
+      ).m;
+    const idle = (s: Stack, slug: string) =>
+      until(
+        async () =>
+          (await s.call("GET", `/api/v1/threads/repo-builder/${slug}`)).body.state === "idle",
+        "idle",
+      );
+
+    // the fork is made after the first pass has counted the original
+    const { s } = await stack();
+    const a = await s.call("POST", "/api/v1/threads", start({ prompt: "[[scenario:steps12]] go" }));
+    await idle(s, a.body.thread_slug);
+    await s.stackd.meter.ingestOnce();
+    const once = await spentMicros(s);
+    expect(once).toBeGreaterThan(0);
+    const fork = await s.call("POST", `/api/v1/threads/repo-builder/${a.body.thread_slug}:fork`, {
+      idempotency_key: key(),
+    });
+    expect(fork.status).toBe(201);
+    await s.stackd.meter.ingestOnce();
+    expect(await spentMicros(s)).toBe(once);
+
+    // the fork is made before any pass has seen either thread
+    const { s: t } = await stack();
+    const b = await t.call("POST", "/api/v1/threads", start({ prompt: "[[scenario:steps12]] go" }));
+    await idle(t, b.body.thread_slug);
+    await t.call("POST", `/api/v1/threads/repo-builder/${b.body.thread_slug}:fork`, {
+      idempotency_key: key(),
+    });
+    await t.stackd.meter.ingestOnce();
+    expect(await spentMicros(t)).toBe(once);
+
+    // a new turn on the fork is new spending
+    const slug = fork.body.thread_slug;
+    const more = await s.call("POST", `/api/v1/threads/repo-builder/${slug}/turns`, {
+      message: "[[scenario:steps12]] again",
+      idempotency_key: key(),
+    });
+    expect(more.status).toBe(201);
+    await idle(s, slug);
+    await s.stackd.meter.ingestOnce();
+    expect(await spentMicros(s)).toBeGreaterThan(once);
+  });
+
   it("reports no lag before the first pass", async () => {
     const { s } = await stack();
     const usage = await s.call("GET", "/api/v1/usage");

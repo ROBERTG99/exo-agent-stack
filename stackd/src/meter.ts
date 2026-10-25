@@ -101,18 +101,33 @@ export class Meter {
               } catch {
                 cost = costMicros({ ...usage, model: null, cost_usd: null }, this.o.rates, pool);
               }
+              // The n-th usage event of a turn in this thread. A fork shows the same turn with the same
+              // events, so it gets the same (turn, n) and is ignored below instead of counted twice.
+              const turnId = String((event as Record<string, unknown>).turn_id ?? "");
+              let ordinal: number | null = null;
+              if (turnId !== "") {
+                const seen = db
+                  .prepare("SELECT n FROM meter_turn_counts WHERE thread_id = ? AND turn_id = ?")
+                  .get(thread.id, turnId) as { n: number } | undefined;
+                ordinal = (seen?.n ?? 0) + 1;
+                db.prepare(
+                  `INSERT INTO meter_turn_counts (thread_id, turn_id, n) VALUES (?, ?, ?)
+                   ON CONFLICT (thread_id, turn_id) DO UPDATE SET n = excluded.n`,
+                ).run(thread.id, turnId, ordinal);
+              }
               const inserted = db
                 .prepare(
                   `INSERT OR IGNORE INTO usage_events
                    (event_id, agent_id, thread_id, turn_id, pool, model, prompt_tokens, completion_tokens,
-                    cached_tokens, cache_creation_tokens, reasoning_tokens, cost_micros, cost_source, cycle)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    cached_tokens, cache_creation_tokens, reasoning_tokens, cost_micros, cost_source, cycle,
+                    turn_ordinal)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 )
                 .run(
                   `${thread.id}:${event.id}`,
                   agent.id,
                   thread.id,
-                  String((event as Record<string, unknown>).turn_id ?? ""),
+                  turnId,
                   pool,
                   usage.model,
                   usage.prompt_tokens,
@@ -123,6 +138,7 @@ export class Meter {
                   cost.micros,
                   cost.source,
                   cycle,
+                  ordinal,
                 );
               if (inserted.changes === 1) {
                 result.ingested++;

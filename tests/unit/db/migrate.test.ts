@@ -24,6 +24,7 @@ describe("migrate", () => {
         "credit_state",
         "idempotency",
         "meter_cursors",
+        "meter_turn_counts",
         "recoveries",
         "schema_migrations",
         "usage_events",
@@ -39,9 +40,10 @@ describe("migrate", () => {
       { version: 1, name: "init" },
       { version: 2, name: "worktree_base_commit" },
       { version: 3, name: "approvals_queue" },
+      { version: 4, name: "usage_turn_ordinal" },
     ]);
     expect(migrate(db, defaultMigrationsDir())).toEqual([]);
-    expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()).toEqual({ n: 3 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get()).toEqual({ n: 4 });
   });
 
   it("uses WAL, foreign keys and a busy timeout", () => {
@@ -54,15 +56,15 @@ describe("migrate", () => {
   it("applies migrations in version order regardless of the order the files were created", () => {
     const dir = copyMigrations();
     writeFileSync(
-      join(dir, "0005_child.sql"),
+      join(dir, "0006_child.sql"),
       "CREATE TABLE extra_child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES extra_parent(id));",
     );
     writeFileSync(
-      join(dir, "0004_parent.sql"),
+      join(dir, "0005_parent.sql"),
       "CREATE TABLE extra_parent (id INTEGER PRIMARY KEY);",
     );
     const db = openDatabase(join(tempDir(), "stack.db"));
-    expect(migrate(db, dir)).toEqual([1, 2, 3, 4, 5]);
+    expect(migrate(db, dir)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(tables(db)).toEqual(expect.arrayContaining(["extra_parent", "extra_child"]));
   });
 
@@ -77,18 +79,18 @@ describe("migrate", () => {
   it("rolls a failing migration back completely and does not record it", () => {
     const dir = copyMigrations();
     writeFileSync(
-      join(dir, "0004_bad.sql"),
+      join(dir, "0005_bad.sql"),
       "CREATE TABLE half_done (id INTEGER); INSERT INTO table_that_does_not_exist VALUES (1);",
     );
     const db = openDatabase(join(tempDir(), "stack.db"));
     expect(() => migrate(db, dir)).toThrow(/table_that_does_not_exist/);
     expect(tables(db)).not.toContain("half_done");
-    expect(db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get()).toEqual({ v: 3 });
+    expect(db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get()).toEqual({ v: 4 });
   });
 
   it("rejects a gap or duplicate in migration numbering", () => {
     const dir = copyMigrations();
-    writeFileSync(join(dir, "0005_gap.sql"), "SELECT 1;");
+    writeFileSync(join(dir, "0006_gap.sql"), "SELECT 1;");
     const db = openDatabase(join(tempDir(), "stack.db"));
     expect(() => migrate(db, dir)).toThrow(/gap|missing/i);
     const dir2 = copyMigrations();
@@ -176,7 +178,7 @@ describe("schema constraints (BUILD.md §4.4)", () => {
       (db.prepare(`PRAGMA index_list(${table})`).all() as { name: string }[]).map((r) => r.name);
     const cols = (name: string) =>
       (db.prepare(`PRAGMA index_info(${name})`).all() as { name: string }[]).map((r) => r.name);
-    const usageIdx = idx("usage_events").find((n) => !n.startsWith("sqlite_autoindex"));
+    const usageIdx = idx("usage_events").find((n) => n === "usage_events_cycle_pool");
     expect(cols(usageIdx!)).toEqual(["cycle", "pool"]);
     const apprIdx = idx("approvals").find((n) => !n.startsWith("sqlite_autoindex"));
     expect(cols(apprIdx!)).toEqual(["decision"]);

@@ -274,9 +274,27 @@ describe("Meter.ingestOnce", () => {
   });
 
   it("keeps threads apart even when their event ids collide", async () => {
-    const { meter, db } = meterWith({ thr_1: [msg("1", U)], thr_2: [msg("1", U)] });
+    const { meter, db } = meterWith({
+      thr_1: [msg("1", U)],
+      thr_2: [msg("1", U, { turn_id: "trn_2" })],
+    });
     expect((await meter.ingestOnce()).ingested).toBe(2);
     expect(db.prepare("SELECT COUNT(*) AS n FROM usage_events").get()).toEqual({ n: 2 });
+  });
+
+  it("counts the events of a turn once when a fork shows them again under other event ids", async () => {
+    const { meter, db } = meterWith({
+      thr_1: [msg("1", U), msg("2", U)],
+      thr_fork: [msg("9", U), msg("10", U), msg("11", U, { turn_id: "trn_new" })],
+    });
+    const r = await meter.ingestOnce();
+    expect(r.ingested).toBe(3); // two of the original turn, one new turn of the fork
+    expect(
+      db.prepare("SELECT turn_id, COUNT(*) AS n FROM usage_events GROUP BY turn_id").all(),
+    ).toEqual([
+      { turn_id: "trn_1", n: 2 },
+      { turn_id: "trn_new", n: 1 },
+    ]);
   });
 
   it("assigns an event to the cycle its timestamp falls in, not the cycle it was read in", async () => {
