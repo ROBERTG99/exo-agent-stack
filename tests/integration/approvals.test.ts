@@ -197,7 +197,7 @@ describe("deciding", () => {
   });
 
   it("does not leave a request open that Exo took when the reply was lost and a sync read the answer meanwhile", async () => {
-    let sync: (() => Promise<unknown>) | undefined;
+    const started: { stack?: Stack } = {};
     let armed = true;
     const s = await startStack({
       stackd: {
@@ -206,7 +206,7 @@ describe("deciding", () => {
           if (armed && init?.method === "POST" && String(input).endsWith("/approval-response")) {
             armed = false;
             await res.text();
-            await sync?.(); // the queue reads the approval_response event now
+            await started.stack?.stackd.approvals.sync(); // the queue reads the approval_response event now
             throw new TypeError("fetch failed");
           }
           return res;
@@ -214,7 +214,7 @@ describe("deciding", () => {
       },
     });
     stacks.push(s);
-    sync = () => s.stackd.approvals.sync();
+    started.stack = s;
     const t = await startThread(s, "[[scenario:approval-edit]] edit");
     const [a] = await waitOpen(s, "the approval");
     const lost = await s.call("POST", `/api/v1/approvals/${a.approval_id}:decide`, {

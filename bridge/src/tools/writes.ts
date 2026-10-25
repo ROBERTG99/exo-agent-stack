@@ -142,7 +142,7 @@ export function registerWrites(server: McpServer, ctx: BridgeContext): void {
       );
     const r = await stackd<{
       approval_id: string;
-      decision: "approved" | "denied" | "approved_for_session";
+      decision: "approved" | "denied";
       recorded_event_id: string | null;
       replayed?: boolean;
     }>(c, {
