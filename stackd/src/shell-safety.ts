@@ -213,14 +213,21 @@ function valueOk(kind: ValueKind, v: string): boolean {
   return v.length <= 500 && ![...v].some((c) => c.charCodeAt(0) < 32 && c !== "\t");
 }
 
-/** Checks `args` against a spec; returns the positional words, or null if anything is off. */
-function check(spec: Spec, args: string[]): string[] | null {
+/**
+ * Checks `args` against a spec; returns the positional words, or null if anything is off. `globs[i]`
+ * says that `args[i]` has an unquoted pattern: the shell replaces it with file names, and one named
+ * `--pre=sh` or `-ofoo` would then be read as an option. A pattern is therefore only accepted as a
+ * path after an explicit `--`.
+ */
+function check(spec: Spec, args: string[], globs: boolean[]): string[] | null {
   const seen = new Set<string>();
   const positional: string[] = [];
   let i = 0;
   let endOfOptions = false;
   while (i < args.length) {
-    const a = args[i++]!;
+    const at = i++;
+    const a = args[at]!;
+    if (globs[at] && !endOfOptions) return null;
     if (!endOfOptions && a === "--") {
       endOfOptions = true;
       continue;
@@ -234,6 +241,7 @@ function check(spec: Spec, args: string[]): string[] | null {
       }
       const kind = spec.valueLong?.[name];
       if (!kind) return null;
+      if (eq < 0 && globs[i]) return null;
       const value = eq < 0 ? args[i++] : a.slice(eq + 1);
       if (value === undefined || !valueOk(kind, value)) return null;
       seen.add(name);
@@ -249,6 +257,7 @@ function check(spec: Spec, args: string[]): string[] | null {
         const kind = spec.valueShort?.[c];
         if (!kind) return null;
         const attached = a.slice(j + 1);
+        if (attached === "" && globs[i]) return null;
         const value = attached !== "" ? attached : args[i++];
         if (value === undefined || !valueOk(kind, value)) return null;
         seen.add(c);
@@ -367,7 +376,8 @@ function grepSpec(): Spec {
 }
 
 /** `find`: start points, then a short list of read-only tests. */
-function findIsSafe(args: string[]): boolean {
+function findIsSafe(args: string[], globs: boolean[]): boolean {
+  if (globs.some(Boolean)) return false;
   let i = 0;
   while (i < args.length && !args[i]!.startsWith("-") && args[i] !== "!") {
     if (!isLocalPath(args[i]!)) return false;
@@ -410,36 +420,57 @@ function findIsSafe(args: string[]): boolean {
   return true;
 }
 
-const GIT_READ_ONLY = new Set([
-  "status",
-  "diff",
-  "log",
-  "show",
-  "rev-parse",
-  "ls-files",
-  "blame",
-  "shortlog",
-  "describe",
-]);
-/** Options that write a file, run a program or point git somewhere else. */
-const GIT_FORBIDDEN =
-  /^(--output|--ext-diff|--textconv|--open-files-in-pager|--no-index|--git-dir|--work-tree|--exec-path|--upload-pack|--receive-pack|--contents|-O)/;
+// Subcommands that only read. git also runs programs named in the repository's own config
+// (`core.fsmonitor`, `diff.external`, textconv filters), and an agent may have written that file, so
+// a command is only provably safe when it switches those off itself: `-c core.fsmonitor=false` always,
+// and `--no-ext-diff --no-textconv` where a diff is made. (`blame`, `shortlog` and `describe` are left
+// to the dashboard rather than vouching for their textconv and index-refresh paths.)
+const GIT_READ_ONLY = new Set(["status", "diff", "log", "show", "rev-parse", "ls-files"]);
+const GIT_DIFFS = new Set(["diff", "log", "show"]);
+/** Options that write a file, run a program or point git somewhere else (long ones, whole). */
+const GIT_FORBIDDEN_LONG = [
+  "--output",
+  "--ext-diff",
+  "--textconv",
+  "--open-files-in-pager",
+  "--no-index",
+  "--git-dir",
+  "--work-tree",
+  "--exec-path",
+  "--upload-pack",
+  "--receive-pack",
+  "--contents",
+];
 
-function gitIsSafe(args: string[]): boolean {
+function gitIsSafe(args: string[], globs: boolean[]): boolean {
   let k = 0;
-  while (args[k] === "--no-pager") k++;
+  let fsmonitorOff = false;
+  for (;;) {
+    if (args[k] === "--no-pager") k += 1;
+    else if (args[k] === "-c" && args[k + 1] === "core.fsmonitor=false") {
+      fsmonitorOff = true;
+      k += 2;
+    } else break;
+  }
+  if (!fsmonitorOff || globs.slice(0, k + 1).some(Boolean)) return false;
   const sub = args[k++];
   if (sub === undefined || !GIT_READ_ONLY.has(sub)) return false;
+  const needed = new Set(GIT_DIFFS.has(sub) ? ["--no-ext-diff", "--no-textconv"] : []);
   let endOfOptions = false;
   for (; k < args.length; k++) {
     const a = args[k]!;
+    if (globs[k] && !endOfOptions) return false;
     if (!endOfOptions && a === "--") {
       endOfOptions = true;
       continue;
     }
     if (!endOfOptions && a.startsWith("-")) {
+      needed.delete(a);
+      // git accepts any unambiguous abbreviation of a long option (`--ext` for `--ext-diff`)
+      const name = a.split("=")[0]!;
       if (
-        GIT_FORBIDDEN.test(a) ||
+        /^-O/.test(a) ||
+        (name.startsWith("--") && GIT_FORBIDDEN_LONG.some((f) => f.startsWith(name))) ||
         !/^-{1,2}[A-Za-z0-9][A-Za-z0-9-]*(=[A-Za-z0-9_.,:/@~^-]*)?$/.test(a)
       )
         return false;
@@ -448,7 +479,7 @@ function gitIsSafe(args: string[]): boolean {
     // a revision or a path: no leading slash or tilde, no ".." path segment, no expansion
     if (!isLocalPath(a)) return false;
   }
-  return true;
+  return needed.size === 0;
 }
 
 function programOf(word: Word): string | null {
@@ -464,26 +495,28 @@ function segmentIsSafe(segment: Segment): boolean {
   const program = programOf(first!);
   if (!program) return false;
   const args = rest.map((w) => w.text);
+  const globs = rest.map((w) => w.glob === true);
+  if (first!.glob) return false;
 
   switch (program) {
     case "echo":
-      return true;
+      return !globs.some(Boolean);
     case "printf":
       // options before the format (`-v var` assigns a shell variable) are not needed
-      return !args[0]?.startsWith("-");
+      return !globs.some(Boolean) && !args[0]?.startsWith("-");
     case "date":
       return (
         args.length === 0 || (args.length === 1 && /^\+[A-Za-z0-9%:_ .-]{1,60}$/.test(args[0]!))
       );
     case "cd":
-      return args.length === 1 && isLocalPath(args[0]!);
+      return args.length === 1 && !globs[0] && isLocalPath(args[0]!);
     case "find":
-      return findIsSafe(args);
+      return findIsSafe(args, globs);
     case "git":
-      return gitIsSafe(args);
+      return gitIsSafe(args, globs);
     default: {
       const spec = Object.hasOwn(SPECS, program) ? SPECS[program] : undefined;
-      return spec !== undefined && check(spec, args) !== null;
+      return spec !== undefined && check(spec, args, globs) !== null;
     }
   }
 }
