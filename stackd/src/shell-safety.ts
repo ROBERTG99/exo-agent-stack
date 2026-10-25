@@ -13,6 +13,8 @@ interface Word {
   text: string;
   /** Written with quotes or backslashes (so `g""it` is not mistaken for `git`). */
   decorated: boolean;
+  /** Has an unquoted `*`, `?` or `[`: the shell will replace it with matching file names. */
+  glob?: boolean;
 }
 
 interface Segment {
@@ -45,6 +47,9 @@ function parse(command: string): Segment[] | null {
 
   const endWord = () => {
     if (!current) return;
+    // `.*` and `.[a-z]*` also match `..`, which leaves the working directory
+    if (current.glob && current.text.split("/").some((segment) => segment.startsWith(".")))
+      throw new Fail();
     if (pendingRedirect) {
       if (!SAFE_REDIRECT_TARGET(current.text)) throw new Fail();
       pendingRedirect = false;
@@ -60,7 +65,10 @@ function parse(command: string): Segment[] | null {
     words = [];
   };
   const add = (ch: string, decorated = false) => {
+    // brace expansion can build any path out of a word that looks local (`{..,x}/y`)
+    if (!decorated && (ch === "{" || ch === "}")) throw new Fail();
     current ??= { text: "", decorated: false };
+    if (!decorated && (ch === "*" || ch === "?" || ch === "[")) current.glob = true;
     current.text += ch;
     if (decorated) current.decorated = true;
   };
@@ -461,7 +469,8 @@ function segmentIsSafe(segment: Segment): boolean {
     case "echo":
       return true;
     case "printf":
-      return args[0] !== "-v";
+      // options before the format (`-v var` assigns a shell variable) are not needed
+      return !args[0]?.startsWith("-");
     case "date":
       return (
         args.length === 0 || (args.length === 1 && /^\+[A-Za-z0-9%:_ .-]{1,60}$/.test(args[0]!))

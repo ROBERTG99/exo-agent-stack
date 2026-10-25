@@ -39,6 +39,13 @@ describe("isProvablySafeBash: read-only inspection a person need not look at twi
     "echo hello",
     "echo 'a && b | c; d'", // operators inside quotes are text
     "printf '%s\\n' hello",
+    "ls *.ts",
+    "cat src/*.ts",
+    "ls src/*/",
+    "ls '.*'", // quoted: a literal name, not a pattern
+    "git show 'HEAD@{1}'",
+    "grep -n 'a{2}' x.txt",
+    "echo \\{a,b\\}", // escaped braces are literal text
     "ls 2>&1",
     "cat a.txt >/dev/null",
     "cd src && ls",
@@ -123,6 +130,18 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
     "cat <(ls)",
     "cat <<EOF\nx\nEOF",
     "{ ls; }",
+    // expansions that turn a local-looking word into another path
+    "cat {/etc/passwd,x}",
+    "cat {..,x}/secret",
+    "cat src/{a,b}.ts",
+    "echo {a,b}",
+    "ls .*",
+    "ls ..*",
+    "ls .[a-z]*",
+    "cat src/.*",
+    "printf -v x y",
+    "printf -vfoo '%s' a",
+    "printf -- '%s' a",
     // reading what an agent must not see, or leaving the working directory
     "cat /etc/hosts",
     "cat ~/.exo-agent-stack/dashboard-token",

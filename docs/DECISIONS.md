@@ -186,3 +186,8 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Why:** BUILD.md §4.9 and FR-10 ("only Codex exports `resumeTurn`; the stackd supervisor continues Claude Code turns"). The idempotency key `recovery:<turn>` of the spec is realised by the `recoveries` row, since a repeated Exo submission cannot be deduplicated by Exo.
 - **Evidence:** the end-to-end test kills the simulator mid-task and finishes it through the supervisor with each step run once.
 - **Unverified:** that a real Exo reports a cut-off turn as inactive without a `turn_ended` after a restart (V-12), and that a continuation in the same session sees the earlier conversation.
+
+## 2026-10-25 · Shell approvals, third iteration: expansions
+
+- **Decision:** an unquoted `{` or `}` makes a command not provably safe (brace expansion can build `../x` or `/etc/passwd` from a word that looks local), as does an unquoted `*`, `?` or `[` in a word with a path segment that starts with a dot (`.*` matches `..`), and `printf` with any leading option (`-v` assigns a shell variable). Quoted braces and globs are literal and stay allowed, as do plain patterns such as `src/*.ts`.
+- **Evidence:** 188 cases in `tests/unit/shell-safety.test.ts`; found by the third automated security review of the same file.
