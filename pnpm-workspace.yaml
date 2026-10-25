@@ -6,6 +6,7 @@ packages:
   - cli
   - dashboard
   - fake-model
+  - exo-sim
   - data/generator
   - evals/runner
   - harnesses/*

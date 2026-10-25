@@ -23,12 +23,18 @@ importers:
       '@exos/exo-client':
         specifier: workspace:*
         version: link:packages/exo-client
+      '@exos/exo-sim':
+        specifier: workspace:*
+        version: link:exo-sim
       '@exos/fake-model':
         specifier: workspace:*
         version: link:fake-model
       '@exos/generator':
         specifier: workspace:*
         version: link:data/generator
+      '@exos/scripted-harness':
+        specifier: workspace:*
+        version: link:harnesses/scripted
       '@exos/stackd':
         specifier: workspace:*
         version: link:stackd
@@ -114,6 +120,28 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
+  exo-sim:
+    dependencies:
+      '@exos/common':
+        specifier: workspace:*
+        version: link:../packages/common
+      '@exos/scripted-harness':
+        specifier: workspace:*
+        version: link:../harnesses/scripted
+      '@exos/tools':
+        specifier: workspace:*
+        version: link:../tools
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+      fastify:
+        specifier: ^5.0.0
+        version: 5.12.7
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^9.6.0
+        version: 9.6.0
+
   fake-model:
     dependencies:
       '@exos/common':
@@ -137,6 +165,8 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+
+  harnesses/scripted: {}
 
   packages/common:
     dependencies:

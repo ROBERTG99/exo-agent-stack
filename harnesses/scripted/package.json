@@ -1,0 +1,10 @@
+{
+  "name": "@exos/scripted-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./turn": "./turn.ts",
+    "./ledger": "./ledger.ts"
+  }
+}

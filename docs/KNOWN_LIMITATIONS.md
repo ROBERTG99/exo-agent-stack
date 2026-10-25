@@ -107,3 +107,7 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 - **V-14** (`exo vault secret create` flags): the scripts check `--help` first.
 - **V-15** (Cursor SDK hosts): the `reviewer-cursor` allowlist is empty.
 - **V-16** (`exo environment create|update`): this stack's own YAML, translated in one place.
+
+## The Exo simulator is not Exo
+
+`exo-sim` implements the endpoints and event shapes the client assumes, not the real server's. It runs the scripted harness for every agent whatever harness the definition names, uses a fixed price list for `cost_usd`, answers `null` for previews, does not enforce vaults or environments, and has no authentication. Passing against it proves the stack's behaviour, not compatibility with Exo; that needs the maintainer's real-Exo run (see "Needs the maintainer" in PROGRESS.md).
