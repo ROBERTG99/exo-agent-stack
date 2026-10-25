@@ -1,0 +1,26 @@
+{
+  "name": "exos",
+  "displayName": "Exo agent stack",
+  "version": "0.1.0",
+  "description": "Delegate work from Claude Code to durable agents on your own Exo stack: start a thread, follow it, answer its questions, see what it costs.",
+  "author": {
+    "name": "ROBERTG99"
+  },
+  "repository": "https://github.com/ROBERTG99/exo-agent-stack",
+  "license": "MIT",
+  "keywords": ["agents", "delegation", "exo", "mcp"],
+  "userConfig": {
+    "stack_dir": {
+      "type": "directory",
+      "title": "Stack checkout",
+      "description": "Your checkout of exo-agent-stack, where `make bootstrap` built bridge/dist/stdio.js.",
+      "required": true
+    },
+    "state_dir": {
+      "type": "directory",
+      "title": "Stack state directory",
+      "description": "The stack's EXOS_STATE_DIR. The bridge reads the API token from local-token in it; it never reads the dashboard token.",
+      "required": true
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "exos-bridge": {
+      "url": "http://127.0.0.1:9811/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:EXOS_LOCAL_TOKEN}"
+      }
+    }
+  }
+}

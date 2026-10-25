@@ -51,3 +51,21 @@ file. Version: `2.1.212 (Claude Code)`, `/opt/homebrew/bin/claude`.
 
 What these facts do not show is the behaviour of the real binary with the generated settings or
 inside a Mode B sandbox. Those are the maintainer's `make live-claude` steps.
+
+## Client integration facts checked against public documentation
+
+These concern Claude Code and Cursor, not Exo. They were read from the public documentation pages
+on 2026-10-25 (fetched as Markdown with `curl -H 'Accept: text/markdown'`), not by running either
+client; the stack never runs `claude plugin validate` or signs in.
+
+| Fact | Source page | Result |
+|---|---|---|
+| A plugin has `.claude-plugin/plugin.json` (only `name` is required), and `commands/`, `agents/` and `.mcp.json` at the plugin root | code.claude.com/docs/en/plugins-reference | confirmed; an unknown top-level key is stripped with a validator warning |
+| A plugin's MCP tools are named `mcp__plugin_<plugin>_<server>__<tool>`, so `exo_approve` of this plugin is `mcp__plugin_exos_exos-bridge__exo_approve` | code.claude.com/docs/en/mcp (plugin-bundled servers) | confirmed |
+| `${user_config.KEY}` is substituted in an MCP server's `command`, `args` and `env`; a `directory` option type exists | code.claude.com/docs/en/plugins-reference (User configuration) | confirmed |
+| A plugin's agents honour `tools` and `disallowedTools` but not `mcpServers`, `hooks` or `permissionMode` | code.claude.com/docs/en/plugins/components (agents) | confirmed |
+| A command's front matter takes `description`, `argument-hint`, `allowed-tools` and `disable-model-invocation`; `$ARGUMENTS` carries the arguments | code.claude.com/docs/en/skills (frontmatter reference) | confirmed |
+| Cursor reads `.cursor/mcp.json`, supports `url` and `headers`, and interpolates `${env:NAME}` in `command`, `args`, `env`, `url` and `headers` | cursor.com/docs/context/mcp (Config interpolation) | confirmed: `.cursor/mcp.json` sends `Authorization: Bearer ${env:EXOS_LOCAL_TOKEN}` |
+
+What these facts do not show is that either client loads these files: `claude plugin validate
+./plugin --strict` and opening the folder in Cursor are the maintainer's steps.

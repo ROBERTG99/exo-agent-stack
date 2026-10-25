@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "exos-bridge": {
+      "command": "node",
+      "args": ["${user_config.stack_dir}/bridge/dist/stdio.js"],
+      "env": {
+        "EXOS_STATE_DIR": "${user_config.state_dir}"
+      }
+    }
+  }
+}

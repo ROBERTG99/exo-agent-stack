@@ -187,8 +187,8 @@ test-exo: ## Host-only: real-Exo tests (needs EXOS_EXO_URL; skips with a reason 
 	$(PNPM) exec vitest run --project contract tests/contract/exo-real.test.ts
 
 .PHONY: plugin-validate
-plugin-validate: ## Validate the Claude Code plugin
-	$(call NOT_YET,T-32)
+plugin-validate: ## Validate the Claude Code plugin and the Cursor configuration
+	$(PNPM) exec tsx scripts/validate-plugin.ts
 
 .PHONY: live-claude
 live-claude: ## Maintainer-only guarded smoke turn on the Claude subscription
