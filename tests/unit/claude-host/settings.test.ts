@@ -2,8 +2,10 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   statSync,
@@ -25,8 +27,10 @@ const worktree = () => realpathSync(mkdtempSync(join(tmpdir(), "wt-")));
 describe("Mode A settings (BUILD.md §4.7)", () => {
   it("denies the destructive and secret-reading rules", () => {
     expect(DENY_RULES).toEqual([
-      "Bash( trash -rf:*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
       "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
       "Bash(curl:*)",
       "Bash(ssh:*)",
       "Read(**/.env)",
@@ -34,6 +38,19 @@ describe("Mode A settings (BUILD.md §4.7)", () => {
       "Read(~/.claude/**)",
       "Read(~/.exo-agent-stack/**)",
     ]);
+  });
+
+  it("keeps the literal rule text in the source file (a tool that rewrites commands must not alter it)", () => {
+    // Regression: a user-level hook that rewrites the rm command to trash silently turned this
+    // deny rule into a no-op, and a test written through the same hook agreed with it.
+    const source = readFileSync(
+      join(import.meta.dirname, "..", "..", "..", "harnesses", "claude-host", "settings.ts"),
+      "utf8",
+    );
+    expect(source).toContain('"Bash(rm -rf:*)"');
+    expect(source).not.toMatch(/trash/i);
+    expect(DENY_RULES[0]!.startsWith("Bash(rm ")).toBe(true);
+    expect(DENY_RULES.every((r) => !r.includes("( ") && !/\btrash\b/.test(r))).toBe(true);
   });
 
   it("uses the default permission mode and disables bypass mode", () => {
@@ -90,6 +107,51 @@ describe("Mode A settings (BUILD.md §4.7)", () => {
   });
 });
 
+describe("writeSettings does not follow symlinks planted in the worktree", () => {
+  const outsideDir = () => realpathSync(mkdtempSync(join(tmpdir(), "outside-")));
+
+  it("replaces a .claude symlink instead of writing through it", () => {
+    const wt = worktree();
+    const outside = outsideDir();
+    symlinkSync(outside, join(wt, ".claude"));
+    writeSettings(wt);
+    expect(lstatSync(join(wt, ".claude")).isSymbolicLink()).toBe(false);
+    expect(lstatSync(join(wt, ".claude")).isDirectory()).toBe(true);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(existsSync(join(wt, ".claude", "settings.local.json"))).toBe(true);
+  });
+
+  it("replaces a settings.local.json symlink instead of overwriting its target", () => {
+    const wt = worktree();
+    const outside = outsideDir();
+    const victim = join(outside, "victim.txt");
+    writeFileSync(victim, "precious");
+    mkdirSync(join(wt, ".claude"));
+    symlinkSync(victim, join(wt, ".claude", "settings.local.json"));
+    writeSettings(wt);
+    expect(readFileSync(victim, "utf8")).toBe("precious");
+    expect(lstatSync(join(wt, ".claude", "settings.local.json")).isSymbolicLink()).toBe(false);
+    expect(
+      JSON.parse(readFileSync(join(wt, ".claude", "settings.local.json"), "utf8")).permissions
+        .defaultMode,
+    ).toBe("default");
+  });
+
+  it("replaces a regular file that sits where the .claude directory belongs", () => {
+    const wt = worktree();
+    writeFileSync(join(wt, ".claude"), "not a directory");
+    writeSettings(wt);
+    expect(lstatSync(join(wt, ".claude")).isDirectory()).toBe(true);
+  });
+
+  it("leaves no temporary files behind", () => {
+    const wt = worktree();
+    writeSettings(wt);
+    writeSettings(wt);
+    expect(readdirSync(join(wt, ".claude"))).toEqual(["settings.local.json"]);
+  });
+});
+
 describe("path guard hook", () => {
   const run = (wt: string, tool: string, input: Record<string, unknown>) => {
     const r = spawnSync(process.execPath, [PATH_GUARD_PATH, wt], {
@@ -126,6 +188,27 @@ describe("path guard hook", () => {
     const outside = realpathSync(mkdtempSync(join(tmpdir(), "outside-")));
     symlinkSync(outside, join(wt, "link"));
     expect(run(wt, "Read", { file_path: join(wt, "link", "secret.txt") }).status).toBe(2);
+  });
+
+  it.each([
+    ["a Glob pattern climbing out with ..", "Glob", { pattern: "../**/*.ts" }],
+    ["a Glob pattern with .. in the middle", "Glob", { pattern: "src/../../x/*" }],
+    ["a Glob pattern anchored outside", "Glob", { pattern: "/etc/**" }],
+    ["a home-anchored Glob pattern", "Glob", { pattern: "~/.ssh/*" }],
+    ["a Grep glob climbing out", "Grep", { pattern: "secret", glob: "../*" }],
+    ["a Grep glob anchored outside", "Grep", { pattern: "secret", glob: "/etc/*" }],
+  ])("blocks %s", (_n, tool, input) => {
+    const r = run(worktree(), tool, input);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/outside the worktree|\.\./i);
+  });
+
+  it("allows in-tree globs and does not treat a Grep regex as a path", () => {
+    const wt = worktree();
+    expect(run(wt, "Glob", { pattern: "src/**/*.ts" }).status).toBe(0);
+    expect(run(wt, "Glob", { pattern: "**/*.md" }).status).toBe(0);
+    expect(run(wt, "Glob", { pattern: join(wt, "src", "*.ts") }).status).toBe(0);
+    expect(run(wt, "Grep", { pattern: "foo/../bar|\\.\\./baz", glob: "*.ts" }).status).toBe(0);
   });
 
   it("does not treat a sibling directory with the same prefix as inside", () => {

@@ -42,12 +42,18 @@ try {
   const candidates = [ti.file_path, ti.notebook_path, ti.path].filter(
     (v) => typeof v === "string" && v !== "",
   );
-  // A Glob pattern is a path only when it is anchored outside the working directory.
-  if (
-    typeof ti.pattern === "string" &&
-    (ti.pattern.startsWith("/") || ti.pattern.startsWith("~"))
-  ) {
-    candidates.push(ti.pattern.split(/[*?[{]/)[0] || "/");
+  // Glob's `pattern` and Grep's `glob` are file globs; Grep's `pattern` is a regex and is not a path.
+  const globs = [input.tool_name === "Glob" ? ti.pattern : undefined, ti.glob].filter(
+    (v) => typeof v === "string" && v !== "",
+  );
+  for (const glob of globs) {
+    if (glob.split(/[\\/]/).includes("..")) {
+      process.stderr.write(`path-guard: glob ${glob} climbs out of the worktree with ..\n`);
+      process.exit(2);
+    }
+    // The part before the first wildcard is the directory the glob starts in.
+    const prefix = glob.split(/[*?[{]/)[0];
+    if (prefix !== "") candidates.push(prefix);
   }
   for (const candidate of candidates) {
     const real = resolveReal(expand(candidate, base));

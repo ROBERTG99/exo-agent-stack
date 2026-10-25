@@ -124,7 +124,7 @@ export function cleanSnapshot(): StackSnapshot {
     ],
     mode_a: {
       deny_list: [
-        "Bash( trash -rf:*)",
+        "Bash(rm -rf:*)",
         "Bash(git push --force:*)",
         "Bash(curl:*)",
         "Bash(ssh:*)",
@@ -289,7 +289,7 @@ export const MUTATIONS: Mutation[] = [
     check: "D-12",
     description: "Mode A deny list lacks the rm -rf rule",
     apply: (s) =>
-      void (s.mode_a.deny_list = s.mode_a.deny_list.filter((d) => d !== "Bash( trash -rf:*)")),
+      void (s.mode_a.deny_list = s.mode_a.deny_list.filter((d) => d !== "Bash(rm -rf:*)")),
   },
   {
     check: "D-12",

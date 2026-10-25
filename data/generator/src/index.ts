@@ -9,6 +9,8 @@ import { dualReviewSuite } from "./suites/dual-review.ts";
 import { durabilitySuite } from "./suites/durability.ts";
 import { policySuite } from "./suites/policy.ts";
 
+export { cleanSnapshot } from "./suites/policy.ts";
+
 export const SEED = 20261022;
 export const GENERATOR_VERSION = "gen.v1";
 

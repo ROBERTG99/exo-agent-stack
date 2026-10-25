@@ -28,6 +28,8 @@ Source of truth: `docs/specs/000-build-spec.md` (`BUILD.md` until the final comm
 - Model calls: none in this repository. LLM rules for any future call are in `.claude/rules/llm-code.md` (BUILD.md Appendix B).
 - Subagents and model routing: `.claude/rules/subagents.md`; log every `opus` and `fable` delegation in the "Model usage" table of `PROGRESS.md`.
 - Hooks (`.claude/hooks/`) enforce the rails; do not work around a block, fix the cause.
+- Write files whose text contains `rm` as a command (deny rules, docs, fixtures) with the Write or Edit tool, never a Bash heredoc: a user-level hook rewrites `rm` to `trash` inside the whole Bash command, which silently corrupted a deny rule once. Grep a file for `trash` after writing it through Bash.
+- Run `git commit` in its own Bash call: the guard scans the whole command text, so a docs heredoc that mentions an attribution-trailer word in the same call is blocked.
 
 ## Commit attribution (BUILD.md §1.1)
 

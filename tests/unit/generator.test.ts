@@ -3,8 +3,15 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { sha256Hex, stackSnapshotSchema } from "@exos/common";
-import { GENERATOR_VERSION, SEED, checkAll, generateAll, writeAll } from "@exos/generator";
+import { canonicalJson, sha256Hex, stackSnapshotSchema } from "@exos/common";
+import {
+  GENERATOR_VERSION,
+  SEED,
+  checkAll,
+  cleanSnapshot,
+  generateAll,
+  writeAll,
+} from "@exos/generator";
 
 const files = generateAll();
 const lines = (path: string): Record<string, any>[] =>
@@ -236,12 +243,28 @@ describe("policy suite", () => {
     expect(new Set(clean.map((c) => JSON.stringify(c.snapshot))).size).toBe(10);
   });
 
-  it("a misconfiguration differs from the clean baseline by its mutation only", () => {
-    const base = clean[0]!.snapshot;
+  it("a misconfiguration really differs from the exact clean baseline, in exactly one section", () => {
+    // Regression: a mutation that filtered on a corrupted rule name was a silent no-op while the
+    // old check (compared with a clean *variant*) still passed.
+    const base = cleanSnapshot() as Record<string, unknown>;
     for (const c of misconfigs) {
-      expect(JSON.stringify(c.snapshot), c.id).not.toBe(JSON.stringify(base));
+      const snap = c.snapshot as Record<string, unknown>;
+      const changed = Object.keys(base).filter(
+        (k) => canonicalJson(snap[k]) !== canonicalJson(base[k]),
+      );
+      expect(changed, `${c.id} ${c.description}`).toHaveLength(1);
       expect(c.description.length).toBeGreaterThan(10);
     }
+  });
+
+  it("only the D-12 'missing rule' case lacks the rm deny rule; every other stack has it, spelled literally", () => {
+    const rule = "Bash(rm -rf:*)";
+    for (const c of cases) {
+      const has = (c.snapshot as any).mode_a.deny_list.includes(rule);
+      const isMissingRuleCase = c.description === "Mode A deny list lacks the rm -rf rule";
+      expect(has, c.id).toBe(!isMissingRuleCase);
+    }
+    expect(JSON.stringify(cases)).not.toMatch(/trash/i);
   });
 
   it("holds names only: no key-shaped values anywhere", () => {

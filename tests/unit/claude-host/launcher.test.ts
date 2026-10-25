@@ -87,7 +87,7 @@ describe("runClaudeTurn (Mode A launcher)", () => {
     const o = opts("[[fake:dump]]");
     const info = dump((await runClaudeTurn(o)).resultText);
     expect(realpathSync(info.cwd)).toBe(o.worktree);
-    expect(info.settings.permissions.deny).toContain("Bash( trash -rf:*)");
+    expect(info.settings.permissions.deny).toContain("Bash(rm -rf:*)");
     expect(info.settings.permissions.disableBypassPermissionsMode).toBe("disable");
     expect(info.settings.permissions.defaultMode).toBe("default");
   });
