@@ -40,6 +40,8 @@ export class GitError extends Error {
   constructor(
     message: string,
     readonly stderr: string,
+    /** The process exit status, or undefined for a timeout/signal/other spawn failure. */
+    readonly exitCode?: number,
   ) {
     super(message);
     this.name = "GitError";
@@ -116,7 +118,14 @@ export class WorktreeManager {
         if (!existsSync(known.worktree_path)) {
           // The directory was deleted from outside; bring the same branch back.
           await this.git(repo, ["worktree", "prune"]);
-          await this.git(repo, ["worktree", "add", "--", known.worktree_path, known.branch]);
+          await this.addWorktree(repo, known.worktree_path, [
+            "worktree",
+            "add",
+            "--no-checkout",
+            "--",
+            known.worktree_path,
+            known.branch,
+          ]);
         }
         return { ...known, created: false };
       }
@@ -135,9 +144,9 @@ export class WorktreeManager {
       ]);
       // A removed thread keeps its branch; creating the slug again continues from it.
       const args = branchExists
-        ? ["worktree", "add", "--", worktreePath, branch]
-        : ["worktree", "add", "-b", branch, "--", worktreePath, "HEAD"];
-      await this.git(repo, [...(await this.neutralisedFilters(repo)), ...args]);
+        ? ["worktree", "add", "--no-checkout", "--", worktreePath, branch]
+        : ["worktree", "add", "--no-checkout", "-b", branch, "--", worktreePath, "HEAD"];
+      await this.addWorktree(repo, worktreePath, args);
       try {
         const base = (await this.git(worktreePath, ["rev-parse", "HEAD"])).trim();
         this.db
@@ -249,36 +258,60 @@ export class WorktreeManager {
   }
 
   /**
-   * `-c` overrides that disable every filter driver the repository configures. A smudge or process
-   * filter is a command that git runs while checking files out, so an untrusted repository could
+   * Adds the worktree without checking anything out (so no filter, hook or fsmonitor can run yet),
+   * then populates it with every configured filter driver neutralised. If anything fails the
+   * half-made worktree is removed again.
+   */
+  private async addWorktree(repo: string, worktreePath: string, addArgs: string[]): Promise<void> {
+    await this.git(repo, addArgs);
+    try {
+      // Listed from the new worktree itself: conditional includes (includeIf onbranch/gitdir)
+      // resolve here exactly as they will during the checkout below.
+      const overrides = await this.neutralisedFilters(worktreePath);
+      await this.git(worktreePath, ["reset", "--hard", "--quiet", "HEAD"], overrides);
+    } catch (err) {
+      await this.git(repo, ["worktree", "remove", "--force", "--", worktreePath]).catch(
+        () => undefined,
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Config overrides that disable every filter driver configured for `cwd`. A smudge or process
+   * filter is a command git runs while checking files out, so an untrusted repository could
    * otherwise execute code on the host while its worktree is created. `required=false` makes git
    * carry on with the unfiltered content (for example git-lfs pointer files).
+   *
+   * The listing uses --null, which separates key from value unambiguously (a value can contain
+   * anything, including text that looks like another variable). It fails closed: only "exit 1 and
+   * no stderr" (nothing matched) means there are no filters; any other failure aborts creation.
    */
-  private async neutralisedFilters(repo: string): Promise<string[]> {
+  private async neutralisedFilters(cwd: string): Promise<[string, string][]> {
     let listing: string;
     try {
-      listing = await this.git(repo, [
+      listing = await this.git(cwd, [
         "config",
+        "--null",
         "--get-regexp",
         "^filter\\..+\\.(smudge|clean|process)$",
       ]);
-    } catch {
-      return []; // exit status 1: no filter is configured
+    } catch (err) {
+      if (err instanceof GitError && err.exitCode === 1 && err.stderr.trim() === "") return [];
+      throw err;
     }
     const drivers = new Set<string>();
-    for (const line of listing.split("\n")) {
-      const name = /^filter\.(.+)\.(?:smudge|clean|process)\s/.exec(line)?.[1];
+    for (const record of listing.split("\0")) {
+      const key = record.split("\n", 1)[0] ?? "";
+      const name = /^filter\.(.+)\.(?:smudge|clean|process)$/.exec(key)?.[1];
       if (name) drivers.add(name);
     }
-    return [...drivers].flatMap((d) => [
-      "-c",
-      `filter.${d}.smudge=false`,
-      "-c",
-      `filter.${d}.clean=false`,
-      "-c",
-      `filter.${d}.process=false`,
-      "-c",
-      `filter.${d}.required=false`,
+    if (drivers.size > 100) throw new GitError(`refusing ${drivers.size} filter drivers`, "");
+    return [...drivers].flatMap((d): [string, string][] => [
+      [`filter.${d}.smudge`, "false"],
+      [`filter.${d}.clean`, "false"],
+      [`filter.${d}.process`, "false"],
+      [`filter.${d}.required`, "false"],
     ]);
   }
 
@@ -303,26 +336,40 @@ export class WorktreeManager {
    * must not redirect it, and the repository's own hooks are switched off (core.hooksPath), because
    * a worktree is created by the stack, not by the repository's owner.
    */
-  private async git(cwd: string, args: string[]): Promise<string> {
+  private async git(cwd: string, args: string[], config: [string, string][] = []): Promise<string> {
+    // Overrides go through GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n so key and value can never be
+    // confused with each other (a `-c key=value` string splits at the first '=').
+    const entries: [string, string][] = [
+      ["core.hooksPath", "/dev/null"],
+      ["core.fsmonitor", "false"],
+      ...config,
+    ];
+    const configEnv: Record<string, string> = { GIT_CONFIG_COUNT: String(entries.length) };
+    entries.forEach(([key, value], i) => {
+      configEnv[`GIT_CONFIG_KEY_${i}`] = key;
+      configEnv[`GIT_CONFIG_VALUE_${i}`] = value;
+    });
     try {
-      const fixed = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
-      const { stdout } = await run("git", [...fixed, "-C", cwd, ...args], {
+      const { stdout } = await run("git", ["-C", cwd, ...args], {
         env: {
           PATH: process.env.PATH ?? "",
           HOME: process.env.HOME ?? "",
           LANG: process.env.LANG ?? "C",
           TMPDIR: process.env.TMPDIR ?? "/tmp",
           GIT_TERMINAL_PROMPT: "0",
+          GIT_CONFIG_NOSYSTEM: "1",
+          ...configEnv,
         },
         timeout: 60_000,
         maxBuffer: 10 * 1024 * 1024,
       });
       return stdout;
     } catch (err) {
-      const e = err as { stderr?: string; message: string };
+      const e = err as { stderr?: string; message: string; code?: unknown };
       throw new GitError(
         `git ${args.join(" ")} failed: ${(e.stderr ?? e.message).trim()}`,
         e.stderr ?? "",
+        typeof e.code === "number" ? e.code : undefined,
       );
     }
   }

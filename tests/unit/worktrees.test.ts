@@ -178,6 +178,83 @@ describe("a repository's own configuration cannot run code on the host", () => {
     expect(readFileSync(join(w.worktree_path, "x.txt"), "utf8")).toBe("payload\n");
   });
 
+  it("neutralises a filter driver whose name contains '=' (no key/value mis-split)", async () => {
+    const { repo, root, manager } = setup();
+    const marker = join(root, "odd-filter-ran");
+    const script = join(root, "odd.sh");
+    writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\ncat\n`);
+    chmodSync(script, 0o755);
+    git(repo, "config", "filter.a=b.smudge", script);
+    writeFileSync(join(repo, ".gitattributes"), "*.txt filter=a=b\n");
+    writeFileSync(join(repo, "y.txt"), "payload\n");
+    git(repo, "add", ".gitattributes", "y.txt");
+    git(repo, "commit", "-q", "-m", "odd filter");
+    const w = await manager.create({ threadSlug: "d-9100000003", workspace: repo });
+    expect(existsSync(marker)).toBe(false);
+    expect(readFileSync(join(w.worktree_path, "y.txt"), "utf8")).toBe("payload\n");
+  });
+
+  it("is not fooled by a value that looks like another filter variable", async () => {
+    const { repo, root, manager } = setup();
+    const marker = join(root, "value-trick-ran");
+    const script = join(root, "trick.sh");
+    writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\ncat\n`);
+    chmodSync(script, 0o755);
+    // The value ends in text that a line-based parser would take for "<name>.smudge <rest>".
+    git(repo, "config", "filter.trick.smudge", `${script} # x.smudge y`);
+    writeFileSync(join(repo, ".gitattributes"), "*.txt filter=trick\n");
+    writeFileSync(join(repo, "z.txt"), "payload\n");
+    git(repo, "add", ".gitattributes", "z.txt");
+    git(repo, "commit", "-q", "-m", "value trick");
+    await manager.create({ threadSlug: "d-9100000006", workspace: repo });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("evaluates the configuration in the new worktree's own context (conditional includes)", async () => {
+    const { repo, root, manager } = setup();
+    const marker = join(root, "include-ran");
+    const script = join(root, "inc.sh");
+    writeFileSync(script, `#!/bin/sh\ntouch '${marker}'\ncat\n`);
+    chmodSync(script, 0o755);
+    const included = join(root, "extra.gitconfig");
+    writeFileSync(included, `[filter "late"]\n\tsmudge = ${script}\n`);
+    // Only applies once the exos/* branch is checked out, which the main repository's own config
+    // listing cannot see.
+    git(repo, "config", "includeIf.onbranch:exos/**.path", included);
+    writeFileSync(join(repo, ".gitattributes"), "*.txt filter=late\n");
+    writeFileSync(join(repo, "w.txt"), "payload\n");
+    git(repo, "add", ".gitattributes", "w.txt");
+    git(repo, "commit", "-q", "-m", "conditional include");
+    const w = await manager.create({ threadSlug: "d-9100000007", workspace: repo });
+    expect(existsSync(marker)).toBe(false);
+    expect(readFileSync(join(w.worktree_path, "w.txt"), "utf8")).toBe("payload\n");
+  });
+
+  it("fails closed when the filter configuration cannot be listed", async () => {
+    const { repo, manager, baseDir } = setup();
+    // Reach the private git runner to make only the config listing fail (a timeout, for instance).
+    type Internals = { git(cwd: string, args: string[], config?: unknown): Promise<string> };
+    const internals = manager as unknown as Internals;
+    const real = internals.git.bind(manager);
+    internals.git = async (cwd, args, config) => {
+      if (args[0] === "config" && args.includes("--get-regexp")) {
+        throw new GitError("git config failed: timed out", "", 124);
+      }
+      return real(cwd, args, config);
+    };
+    await expect(
+      manager.create({ threadSlug: "d-9100000004", workspace: repo }),
+    ).rejects.toBeInstanceOf(GitError);
+    expect(existsSync(join(baseDir, "d-9100000004"))).toBe(false);
+    expect(manager.get("d-9100000004")).toBeUndefined();
+  });
+
+  it("treats 'no filter configured' (exit 1, no output) as safe", async () => {
+    const { repo, manager } = setup();
+    const w = await manager.create({ threadSlug: "d-9100000005", workspace: repo });
+    expect(w.created).toBe(true);
+  });
+
   it("does not run a configured fsmonitor", async () => {
     const { repo, root, manager } = setup();
     const marker = join(root, "fsmonitor-ran");
