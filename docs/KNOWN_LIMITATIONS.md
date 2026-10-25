@@ -112,3 +112,9 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 ## The Exo simulator is not Exo
 
 `exo-sim` implements the endpoints and event shapes the client assumes, not the real server's. It runs the scripted harness for every agent whatever harness the definition names, uses a fixed price list for `cost_usd`, answers `null` for previews, does not enforce vaults or environments, and has no authentication. Passing against it proves the stack's behaviour, not compatibility with Exo; that needs the maintainer's real-Exo run (see "Needs the maintainer" in PROGRESS.md).
+
+## Environment hosts: the snapshot gives a limited environment the union of all allowlists
+
+- **What:** `environments/allowlists.yaml` lists hosts per agent, but an environment (for example `smolvm-default`) is shared and, as far as the spec says, Exo's limited networking is a property of the environment, not of the agent (unverified, V-15). `doctor/src/environments.ts` therefore reports a limited environment with the union of every agent's list. Doctor D-10 ("allowlists within `allowlists.yaml`") passes by construction on that data, and an agent with an empty list (`reviewer-cursor`) would share the union if it were run in the same sandbox.
+- **Consequence:** D-10 catches a host that was added to an environment outside `allowlists.yaml`, not an agent that gets more hosts than its own list. Per-agent isolation needs one environment per allowlist.
+- **Closes when:** the doctor task (T-31) compares each sandboxed agent's list with the environment it is created in and warns on a wider one, or Exo is verified to scope the policy per agent.

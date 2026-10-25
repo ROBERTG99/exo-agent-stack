@@ -251,6 +251,24 @@ export class Store {
     };
   }
 
+  /** Runs related writes as one unit, so a kill between them cannot leave half of them behind. */
+  atomic<T>(fn: () => T): T {
+    return this.db.transaction(fn).immediate();
+  }
+
+  /** Every event of a thread, oldest first, however many there are. */
+  allEvents(threadId: string): EventRow[] {
+    const out: EventRow[] = [];
+    for (;;) {
+      const page = this.events(threadId, {
+        after: out.length ? out[out.length - 1]!.id : undefined,
+        limit: 1000,
+      });
+      out.push(...page);
+      if (page.length < 1000) return out;
+    }
+  }
+
   events(threadId: string, q: EventQuery = {}): EventRow[] {
     const where = ["thread_id = ?"];
     const args: unknown[] = [threadId];
@@ -265,7 +283,7 @@ export class Store {
     const order = q.direction === "desc" ? "DESC" : "ASC";
     const rows = this.db
       .prepare(`SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY id ${order} LIMIT ?`)
-      .all(...args, Math.min(q.limit ?? 200, 1000)) as {
+      .all(...args, Math.max(1, Math.min(q.limit ?? 200, 1000))) as {
       id: number;
       type: string;
       ts: string;
@@ -491,7 +509,7 @@ export class Store {
           harness: source.harness ?? undefined,
           model: source.model,
         });
-        const events = this.events(sourceId, { limit: 1000 });
+        const events = this.allEvents(sourceId);
         for (const e of events) {
           const { id: _id, type, ts: _ts, thread_id: _t, session_id, turn_id, ...payload } = e;
           this.addEvent(thread.id, { type, session_id, turn_id, payload });

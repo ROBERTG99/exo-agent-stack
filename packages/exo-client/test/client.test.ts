@@ -440,6 +440,23 @@ describe("watchEvents edge cases", () => {
     expect(got).toEqual(["e1", "e2"]);
     expect(stub.calls[1]!.query.after).toBe("e1");
   });
+
+  it("keeps following a stream that drops again and again as long as each connection made progress", async () => {
+    const { client } = await setup((_c, res, n) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const type = n === 6 ? "turn_ended" : "a";
+      res.write(`id: e${n}\ndata: {"id":"e${n}","type":"${type}"}\n\n`);
+      if (n < 6) setTimeout(() => res.destroy(), 10);
+      else res.end();
+    });
+    const got: string[] = [];
+    for await (const e of client.watchEvents("a", "t", {
+      stopWhen: (ev) => ev.type === "turn_ended",
+    })) {
+      got.push(e.id);
+    }
+    expect(got).toEqual(["e1", "e2", "e3", "e4", "e5", "e6"]);
+  });
 });
 
 describe("events and usage", () => {

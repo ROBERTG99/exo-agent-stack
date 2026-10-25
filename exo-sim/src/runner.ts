@@ -84,15 +84,16 @@ export class TurnRunner {
 
   private async run(turn: TurnRow, signal: AbortSignal): Promise<void> {
     const { store } = this.o;
-    const finish = (status: "completed" | "canceled" | "failed") => {
-      store.setTurnStatus(turn.id, status);
-      store.addEvent(turn.thread_id, {
-        type: "turn_ended",
-        session_id: turn.session_id,
-        turn_id: turn.id,
-        payload: { status },
+    const finish = (status: "completed" | "canceled" | "failed") =>
+      store.atomic(() => {
+        store.setTurnStatus(turn.id, status);
+        store.addEvent(turn.thread_id, {
+          type: "turn_ended",
+          session_id: turn.session_id,
+          turn_id: turn.id,
+          payload: { status },
+        });
       });
-    };
     try {
       await runScriptedTurn(this.ports(turn, signal));
       finish("completed");
@@ -136,7 +137,7 @@ export class TurnRunner {
       maxRoundTrips: 256,
       conversation: async () => {
         check();
-        return conversationOf(store.events(turn.thread_id, { limit: 1000 }));
+        return conversationOf(store.allEvents(turn.thread_id));
       },
       callModel: async (input) => {
         check();
@@ -234,14 +235,21 @@ export class TurnRunner {
         );
       }
       case "write_report": {
-        const w = store.writeArtifact(
-          turn.thread_id,
-          String(call.args.name),
-          String(call.args.content ?? ""),
-          call.id,
-        );
-        if (w.created)
-          emit("artifact_written", { name: w.name, version: w.version, call_id: call.id });
+        const w = store.atomic(() => {
+          const written = store.writeArtifact(
+            turn.thread_id,
+            String(call.args.name),
+            String(call.args.content ?? ""),
+            call.id,
+          );
+          if (written.created)
+            emit("artifact_written", {
+              name: written.name,
+              version: written.version,
+              call_id: call.id,
+            });
+          return written;
+        });
         return JSON.stringify({ name: w.name, version: w.version });
       }
       case "run_checks":
@@ -254,20 +262,23 @@ export class TurnRunner {
         const tool = String(call.args.name);
         if (turn.auto_approve_tools.includes(tool))
           return JSON.stringify({ approved: true, auto: true });
-        const { row, created } = store.ensurePending("approval", {
-          call_id: call.id,
-          thread_id: turn.thread_id,
-          turn_id: turn.id,
-          session_id: turn.session_id,
-          payload: { tool, arguments: call.args.arguments ?? {} },
-        });
-        if (created)
-          emit("agent_runtime.approval_requested", {
-            approval_id: row.id,
-            tool,
-            arguments: call.args.arguments ?? {},
+        const { row } = store.atomic(() => {
+          const pending = store.ensurePending("approval", {
             call_id: call.id,
+            thread_id: turn.thread_id,
+            turn_id: turn.id,
+            session_id: turn.session_id,
+            payload: { tool, arguments: call.args.arguments ?? {} },
           });
+          if (pending.created)
+            emit("agent_runtime.approval_requested", {
+              approval_id: pending.row.id,
+              tool,
+              arguments: call.args.arguments ?? {},
+              call_id: call.id,
+            });
+          return pending;
+        });
         const decided = await this.waitDecided(row.id, signal);
         return JSON.stringify({ approved: decided.decision?.approved === true });
       }
@@ -275,20 +286,23 @@ export class TurnRunner {
         if (!turn.frontend_tools.some((t) => (t as { name?: string })?.name === "ask_user")) {
           throw new Error("ask_user is not available in this turn (no frontend tool was declared)");
         }
-        const { row, created } = store.ensurePending("frontend", {
-          call_id: call.id,
-          thread_id: turn.thread_id,
-          turn_id: turn.id,
-          session_id: turn.session_id,
-          payload: { tool: "ask_user", arguments: call.args },
-        });
-        if (created)
-          emit("frontend_tool_requested", {
-            tool_call_id: call.id,
+        const { row } = store.atomic(() => {
+          const pending = store.ensurePending("frontend", {
             call_id: call.id,
-            name: "ask_user",
-            arguments: call.args,
+            thread_id: turn.thread_id,
+            turn_id: turn.id,
+            session_id: turn.session_id,
+            payload: { tool: "ask_user", arguments: call.args },
           });
+          if (pending.created)
+            emit("frontend_tool_requested", {
+              tool_call_id: call.id,
+              call_id: call.id,
+              name: "ask_user",
+              arguments: call.args,
+            });
+          return pending;
+        });
         const decided = await this.waitDecided(row.id, signal);
         return String(decided.decision?.output ?? "");
       }

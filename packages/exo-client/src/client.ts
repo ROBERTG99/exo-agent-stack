@@ -273,6 +273,9 @@ export class ExoClient {
       } catch (err) {
         if (opts.signal?.aborted) return;
         if (!(err instanceof ExoUnavailableError) && !isNetworkError(err)) throw err;
+        // A connection that delivered events before it dropped made progress: only consecutive
+        // connections without progress count against the retry budget.
+        if (delivered > 0) failures = 0;
         failures++;
         if (failures > this.retries) {
           throw err instanceof ExoUnavailableError

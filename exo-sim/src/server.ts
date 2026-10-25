@@ -110,7 +110,7 @@ export async function createExoSim(opts: ExoSimOptions): Promise<ExoSim> {
       const page = store.listThreads(
         a.id,
         Number(req.query.cursor ?? 0) || 0,
-        Math.min(Number(req.query.limit ?? 50) || 50, 200),
+        Math.max(1, Math.min(Number(req.query.limit ?? 50) || 50, 200)),
       );
       return {
         threads: page.threads.map(threadJson),
@@ -172,31 +172,36 @@ export async function createExoSim(opts: ExoSimOptions): Promise<ExoSim> {
         return fail(reply, 400, "invalid_request", "input is required");
       if (store.activeTurn(r.t.id))
         return fail(reply, 409, "turn_active", "the thread already has an active turn");
-      const turn = store.createTurn({
-        thread_id: r.t.id,
-        session_id: typeof b.session_id === "string" ? b.session_id : undefined,
-        input: b.input,
-        frontend_tools: Array.isArray(b.frontend_tools) ? b.frontend_tools : [],
-        auto_approve_tools: Array.isArray(b.auto_approve_tools)
-          ? b.auto_approve_tools.map(String)
-          : [],
-      });
-      const known = store.db
-        .prepare(
-          "SELECT 1 FROM events WHERE thread_id = ? AND session_id = ? AND type = 'session_started' LIMIT 1",
-        )
-        .get(r.t.id, turn.session_id);
-      if (!known) store.addEvent(r.t.id, { type: "session_started", session_id: turn.session_id });
-      store.addEvent(r.t.id, {
-        type: "turn_started",
-        session_id: turn.session_id,
-        turn_id: turn.id,
-      });
-      store.addEvent(r.t.id, {
-        type: "messages",
-        session_id: turn.session_id,
-        turn_id: turn.id,
-        payload: { role: "user", text: b.input },
+      // One unit: a turn row without its opening events would block the thread forever.
+      const turn = store.atomic(() => {
+        const created = store.createTurn({
+          thread_id: r.t.id,
+          session_id: typeof b.session_id === "string" ? b.session_id : undefined,
+          input: b.input as string,
+          frontend_tools: Array.isArray(b.frontend_tools) ? b.frontend_tools : [],
+          auto_approve_tools: Array.isArray(b.auto_approve_tools)
+            ? b.auto_approve_tools.map(String)
+            : [],
+        });
+        const known = store.db
+          .prepare(
+            "SELECT 1 FROM events WHERE thread_id = ? AND session_id = ? AND type = 'session_started' LIMIT 1",
+          )
+          .get(r.t.id, created.session_id);
+        if (!known)
+          store.addEvent(r.t.id, { type: "session_started", session_id: created.session_id });
+        store.addEvent(r.t.id, {
+          type: "turn_started",
+          session_id: created.session_id,
+          turn_id: created.id,
+        });
+        store.addEvent(r.t.id, {
+          type: "messages",
+          session_id: created.session_id,
+          turn_id: created.id,
+          payload: { role: "user", text: b.input },
+        });
+        return created;
       });
       runner.start(turn);
       return {
@@ -299,13 +304,20 @@ export async function createExoSim(opts: ExoSimOptions): Promise<ExoSim> {
       const r = resolve(reply, req.params.a, req.params.t);
       if (!r) return;
       const q = req.query;
+      const whole = (v: string | undefined) =>
+        v === undefined ? undefined : /^\d+$/.test(v) ? Number(v) : NaN;
+      const limit = whole(q.limit);
+      if (limit !== undefined && !(limit >= 1))
+        return fail(reply, 400, "invalid_request", "limit must be a positive integer");
+      if (q.after !== undefined && Number.isNaN(whole(q.after)))
+        return fail(reply, 400, "invalid_request", "after must be an event id");
       return {
         events: store.events(r.t.id, {
           session_id: q.session_id,
           turn_id: q.turn_id,
           after: q.after,
           event_type: q.event_type,
-          limit: q.limit ? Number(q.limit) : undefined,
+          limit,
           direction: q.direction === "desc" ? "desc" : "asc",
         }),
       };

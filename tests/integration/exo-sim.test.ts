@@ -2,14 +2,14 @@
 // ExoClient that stackd uses, against the real fake model server, and check the durability
 // properties the stack relies on (exactly-once tool calls and pending decisions across a kill).
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { ExoClient } from "../../packages/exo-client/src/index.ts";
 import { buildFakeModel } from "../../fake-model/src/server.ts";
-import { createExoSim } from "../../exo-sim/src/index.ts";
+import { createExoSim, Store } from "../../exo-sim/src/index.ts";
 import { ledgerStats } from "../../harnesses/scripted/ledger.ts";
 
 const root = join(import.meta.dirname, "..", "..");
@@ -114,6 +114,26 @@ const ended = (s: Started, ids: { agent: string; thread: string; turn: string })
       (await s.events(ids.agent, ids.thread, `?turn_id=${ids.turn}&event_type=turn_ended`))[0],
     "turn_ended",
   );
+
+/** Calls the ledger absorbed instead of writing twice: only the call in flight at a crash may replay. */
+const absorbedCalls = (ledgerPath: string): number =>
+  existsSync(`${ledgerPath}.absorbed`)
+    ? readFileSync(`${ledgerPath}.absorbed`, "utf8").split("\n").filter(Boolean).length
+    : 0;
+
+/** One tool_requested and one tool_result per call id: nothing was run, or recorded, twice. */
+async function expectOneResultPerCall(
+  s: Started,
+  ids: { agent: string; thread: string },
+  ledgerPath: string,
+) {
+  for (const type of ["tool_requested", "tool_result"]) {
+    const evs = await s.events(ids.agent, ids.thread, `?event_type=${type}&limit=100`);
+    expect(evs, type).toHaveLength(12);
+    expect(new Set(evs.map((e) => e.call_id)).size, type).toBe(12);
+  }
+  expect(absorbedCalls(ledgerPath)).toBeLessThanOrEqual(1);
+}
 
 describe("exo-sim: agents and threads", () => {
   it("creates, lists, filters and rejects duplicate agents", async () => {
@@ -395,6 +415,81 @@ describe("exo-sim: artifacts, fork, events", () => {
   });
 });
 
+describe("exo-sim: limits and atomicity", () => {
+  it("keeps every event of a long thread for the conversation and for a fork", () => {
+    const store = new Store(join(tmp(), "long.db"));
+    cleanups.push(() => store.close());
+    const agent = store.createAgent("long", { slug: "long" });
+    const { thread } = store.createThread(agent.id, { slug: "t" });
+    for (let i = 0; i < 1100; i++) {
+      store.addEvent(thread.id, { type: "messages", payload: { role: "user", text: `m${i}` } });
+    }
+    const all = store.allEvents(thread.id);
+    expect(all).toHaveLength(1100);
+    expect(all.at(-1)?.text).toBe("m1099");
+    const forked = store.forkThread(agent.id, thread.id, { name: "copy" });
+    const copied = store.allEvents(forked.id);
+    expect(copied.filter((e) => e.type === "messages")).toHaveLength(1100);
+    expect(copied.at(-1)).toMatchObject({
+      type: "thread_forked",
+      forked_at_event_id: all.at(-1)?.id,
+    });
+  });
+
+  it("answers 400 for a malformed limit or cursor and bounds a negative limit", async () => {
+    const s = await start();
+    const ids = await turn(s, "[[scenario:plain]] hi");
+    await ended(s, ids);
+    for (const q of ["?limit=abc", "?limit=0", "?limit=-1", "?after=zzz", "?limit=1.5"]) {
+      const res = await fetch(`${s.url}/agent/${ids.agent}/thread/${ids.thread}/event${q}`);
+      expect(res.status, q).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+        "invalid_request",
+      );
+    }
+    expect((await s.events(ids.agent, ids.thread, "?limit=2")).length).toBe(2);
+  });
+
+  it("leaves no stuck turn when recording the user message fails", async () => {
+    const s = await start();
+    await s.client.createManagedAgent({ slug: "tester", definition: {} });
+    const agent = (await s.client.listAgents({ slug: "tester" }))[0]!;
+    const thread = idOf(
+      (await s.client.createThread(agent.id, { vaults: [], thread_slug: "x" })).thread,
+    );
+    const real = s.sim.store.addEvent.bind(s.sim.store);
+    let failed = false;
+    s.sim.store.addEvent = (threadId, e) => {
+      if (!failed && e.type === "messages") {
+        failed = true;
+        throw new Error("disk full");
+      }
+      return real(threadId, e);
+    };
+    const res = await fetch(`${s.url}/agent/${agent.id}/thread/${thread}/turn`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ input: "[[scenario:plain]] hi" }),
+    });
+    expect(res.status).toBe(500);
+    expect(s.sim.store.activeTurn(thread)).toBeUndefined();
+    const retry = await s.client.submitTurn(agent.id, thread, { input: "[[scenario:plain]] hi" });
+    expect(ExoClient.turnId(retry)).toBeTruthy();
+  });
+
+  it("creates no approval row when the approval request cannot be recorded", async () => {
+    const s = await start();
+    const real = s.sim.store.addEvent.bind(s.sim.store);
+    s.sim.store.addEvent = (threadId, e) => {
+      if (e.type === "agent_runtime.approval_requested") throw new Error("disk full");
+      return real(threadId, e);
+    };
+    const ids = await turn(s, "[[scenario:approval-edit]] edit");
+    await ended(s, ids);
+    expect(s.sim.store.db.prepare("SELECT COUNT(*) AS n FROM pending").get()).toEqual({ n: 0 });
+  });
+});
+
 describe("exo-sim: durability", () => {
   it("resumes an unfinished turn after a crash without repeating a tool call", async () => {
     const dataDir = tmp();
@@ -411,6 +506,7 @@ describe("exo-sim: durability", () => {
     const second = await start({ dataDir, modelUrl, ledgerPath });
     expect(await ended(second, ids)).toMatchObject({ status: "completed" });
     expect(ledgerStats(ledgerPath)).toMatchObject({ entries: 12, unique: 12, duplicates: 0 });
+    await expectOneResultPerCall(second, ids, ledgerPath);
     const endedEvents = await second.events(ids.agent, ids.thread, "?event_type=turn_ended");
     expect(endedEvents).toHaveLength(1);
   });
@@ -508,6 +604,15 @@ describe("exo-sim: durability", () => {
       30_000,
     );
     expect(ledgerStats(ledgerPath)).toMatchObject({ entries: 12, unique: 12, duplicates: 0 });
+    for (const type of ["tool_requested", "tool_result"]) {
+      const listed = await fetch(
+        `${url}/agent/${agent.id}/thread/${idOf(t.thread)}/event?event_type=${type}&limit=100`,
+      );
+      const calls = ((await listed.json()) as { events: Ev[] }).events;
+      expect(calls, type).toHaveLength(12);
+      expect(new Set(calls.map((e) => e.call_id)).size, type).toBe(12);
+    }
+    expect(absorbedCalls(ledgerPath)).toBeLessThanOrEqual(1);
     const res = await fetch(
       `${url}/agent/${agent.id}/thread/${idOf(t.thread)}/event?event_type=turn_ended`,
     );
