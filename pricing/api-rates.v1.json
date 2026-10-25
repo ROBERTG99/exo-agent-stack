@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "currency": "USD",
+  "unit": "micro_dollars_per_million_tokens",
+  "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "retrieved_at": "2026-10-25",
+  "note": "API list prices copied from the source page on retrieved_at. They estimate what Claude usage would cost at API rates; subscription usage is not billed this way. Rates are integer micro-dollars per million tokens (4000000 = $4 / MTok). Only model ids the stack uses are listed; any other model is priced at the highest rate in this table (cost_source max_estimate).",
+  "models": {
+    "claude-fable-5-1": {
+      "display_name": "Claude Fable 5.1",
+      "input": 10000000,
+      "cache_write": 12500000,
+      "cache_read": 250000,
+      "output": 50000000
+    },
+    "claude-opus-5-5": {
+      "display_name": "Claude Opus 5.5",
+      "input": 4000000,
+      "cache_write": 5000000,
+      "cache_read": 200000,
+      "output": 20000000
+    },
+    "claude-sonnet-5-5": {
+      "display_name": "Claude Sonnet 5.5",
+      "input": 2000000,
+      "cache_write": 2500000,
+      "cache_read": 100000,
+      "output": 10000000
+    },
+    "claude-haiku-5-5": {
+      "display_name": "Claude Haiku 5.5",
+      "input": 100000,
+      "cache_write": 125000,
+      "cache_read": 10000,
+      "output": 500000,
+      "long_prompt": {
+        "over_tokens": 100000,
+        "input": 500000,
+        "cache_write": 625000,
+        "cache_read": 50000,
+        "output": 2500000
+      }
+    }
+  }
+}
