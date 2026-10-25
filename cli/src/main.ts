@@ -3,6 +3,7 @@
 import { fileURLToPath } from "node:url";
 import { agentsCommand } from "./commands/agents.ts";
 import { auditCommand } from "./commands/audit.ts";
+import { doctorCommand } from "./commands/doctor.ts";
 import { dualReviewCommand } from "./commands/dual-review.ts";
 
 export interface CommandIo {
@@ -16,6 +17,7 @@ type Command = (args: string[], io: CommandIo) => number | Promise<number>;
 export const commands: Record<string, Command> = {
   agents: agentsCommand,
   audit: auditCommand,
+  doctor: doctorCommand,
   "dual-review": dualReviewCommand,
 };
 

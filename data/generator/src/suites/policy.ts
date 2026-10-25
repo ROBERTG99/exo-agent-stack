@@ -103,7 +103,7 @@ export function cleanSnapshot(): StackSnapshot {
         mounts: [],
       },
     ],
-    allowlists: SMOLVM_HOSTS,
+    allowlists: structuredClone(SMOLVM_HOSTS),
     mcp_servers: [
       {
         agent: "researcher",

@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./launcher": "./launcher.ts",
-    "./approvals-mcp": "./approvals-mcp.ts"
+    "./approvals-mcp": "./approvals-mcp.ts",
+    "./settings": "./settings.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

@@ -78,8 +78,17 @@ export const stackSnapshotSchema = z.object({
     substitution_verified: z.boolean(),
   }),
   cursor: z.object({ secret_origin: z.string().optional() }),
-  meter: z.object({ lag_seconds: z.number(), external_turns: z.number().int() }),
-  permissions: z.object({ token_mode: z.string(), state_dir_mode: z.string() }),
+  meter: z.object({
+    lag_seconds: z.number(),
+    /** Turns started outside the stack; absent when the collector could not count them. */
+    external_turns: z.number().int().optional(),
+  }),
+  permissions: z.object({
+    token_mode: z.string(),
+    state_dir_mode: z.string(),
+    /** Mode of the dashboard login token file, when it exists. */
+    dashboard_token_mode: z.string().optional(),
+  }),
   price_table: z.object({ retrieved_at: z.string(), now: z.string() }),
   submodule: z.object({ dirty: z.boolean(), patches_recorded: z.boolean() }),
   workflows: z.array(
@@ -94,6 +103,8 @@ export const stackSnapshotSchema = z.object({
     }),
   ),
   dashboard_only_tools: z.array(z.string()),
+  /** Checks the collector could not gather facts for, by id, with the reason. They are skipped. */
+  unavailable: z.record(z.string(), z.string()).optional(),
 });
 
 export type StackSnapshot = z.infer<typeof stackSnapshotSchema>;

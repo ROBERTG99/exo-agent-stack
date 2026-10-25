@@ -117,7 +117,7 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 
 - **What:** `environments/allowlists.yaml` lists hosts per agent, but an environment (for example `smolvm-default`) is shared and, as far as the spec says, Exo's limited networking is a property of the environment, not of the agent (unverified, V-15). `doctor/src/environments.ts` therefore reports a limited environment with the union of every agent's list. Doctor D-10 ("allowlists within `allowlists.yaml`") passes by construction on that data, and an agent with an empty list (`reviewer-cursor`) would share the union if it were run in the same sandbox.
 - **Consequence:** D-10 catches a host that was added to an environment outside `allowlists.yaml`, not an agent that gets more hosts than its own list. Per-agent isolation needs one environment per allowlist.
-- **Closes when:** the doctor task (T-31) compares each sandboxed agent's list with the environment it is created in and warns on a wider one, or Exo is verified to scope the policy per agent.
+- **Now:** doctor D-10 compares each sandboxed agent's list with the environment it runs in and warns on a wider one (T-31). **Closes when:** each agent with a short list gets its own environment, or Exo is verified to scope the policy per agent.
 
 ## stackd threads API: conventions Exo has not confirmed
 
@@ -139,3 +139,8 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 - **What:** the read-only check for bridge-approvable `claude.Bash` commands (stackd/src/shell-safety.ts) works on the command text. A symlink in a worktree that points to a secret would let an approved `cat link` read it. The dashboard token lives in `<state dir>/dashboard-token`, the same directory as the worktrees, protected by the deny rules and by the check refusing `..`.
 - **Mitigation today:** a person approves every command that is not plainly read-only; Mode A's deny list and path guard stop reads of the state directory; Mode B has no host filesystem.
 - **Closes when:** the dashboard token moves out of the state directory (for example into a per-user config directory the harnesses never mount), and doctor D-17 verifies it.
+
+## Doctor facts that need a built Exo, a running stack or more instrumentation
+
+- **What:** `make doctor` skips (with the reason) the checks whose facts it cannot read: D-01, D-02 and D-19 need `vendor/exo` and a running Exo (T-02 is blocked), D-06 and D-07 read vault metadata with `exo vault list`, D-04, D-16, D-17 (before the first start) and D-22 need stackd. The count of turns started outside the stack (D-16) is not measured, so the check says so. The Cursor secret (D-15) and Mode B's secret origin are vault metadata and skipped with the vault. The write-tool policy of an MCP server is inferred (docs/DECISIONS.md), not read from the server.
+- **Closes when:** Exo is built (T-02) and the vault flags are verified (V-9, V-15); external turns are counted by the meter.

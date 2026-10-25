@@ -148,8 +148,8 @@ exo-doctor: ## exo agent doctor per agent
 	$(call NOT_YET,T-09)
 
 .PHONY: doctor
-doctor: ## exos doctor --json, exit 1 on any fail
-	$(call NOT_YET,T-31)
+doctor: ## exos doctor, exit 1 on any fail (add ARGS=--json for JSON)
+	$(PNPM) exec tsx cli/src/main.ts doctor $(ARGS)
 
 .PHONY: agents-lint
 agents-lint: ## Lint agent definitions (hand-written and generated)
