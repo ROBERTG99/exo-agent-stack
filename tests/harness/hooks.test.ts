@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -147,6 +156,34 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     ["# <<'X'\nclaude login\nX", "no-signin"],
     ["GIT_CONFIG_COUNT=1 git commit -m x", "git-identity"],
     ["GIT_CONFIG_PARAMETERS='user.name=x' git commit -m x", "git-identity"],
+    // review round 6: redirects, comments, push-changing config
+    ["git push origin main 2>&1 --force", "no-force-push"],
+    ["git push origin main >&2 --delete x", "no-force-push"],
+    ["(true)#<<X\nclaude login\nX", "no-signin"],
+    ["git -c remote.origin.push=+refs/heads/*:refs/heads/* push origin", "no-force-push"],
+    ["git -c core.pager=cat push origin main", "no-force-push"],
+    ["git config remote.origin.push +refs/heads/*:refs/heads/*", "no-force-push"],
+    ["git config alias.pf 'push --force'", "no-force-push"],
+    ["git config url.evil.insteadOf https://github.com/", "no-force-push"],
+    ["echo x >> .git/config", "git-internals"],
+    ["cp /tmp/h .git/hooks/pre-push", "git-internals"],
+    // reviewer round: wrappers, runners, env-var binds, tunnels
+    ["/usr/bin/env claude login", "no-signin"],
+    ["env -i claude login", "no-signin"],
+    ["sudo -E claude login", "no-signin"],
+    ["sudo -u root claude login", "no-signin"],
+    ["env -u FOO BAR=1 /opt/homebrew/bin/claude login", "no-signin"],
+    ["pnpm exec claude setup-token", "no-signin"],
+    ["npx @anthropic-ai/claude-code setup-token", "no-signin"],
+    ["npx -y claude login", "no-signin"],
+    ["HOST=0.0.0.0 node server.js", "loopback-only"],
+    ["EXOS_LISTEN_HOST=0.0.0.0 pnpm exec tsx x.ts", "loopback-only"],
+    ["EXOS_LISTEN_HOST=10.1.1.1 node x.js", "loopback-only"],
+    ["EXOS_LISTEN_HOST=container EXOS_IN_CONTAINER=1 node stackd/src/server.ts", "loopback-only"],
+    ["ngrok http 9812", "no-tunnels"],
+    ["cloudflared tunnel run", "no-tunnels"],
+    ["ssh -R 9812:localhost:9812 host", "no-tunnels"],
+    ["docker run --network host img", "loopback-only"],
     // loopback allowlists
     ["exo run --serve --bind 10.0.0.5:9810", "loopback-only"],
     ["node server.js --host example.com", "loopback-only"],
@@ -199,6 +236,21 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     "cat <<-'EOF'\n\tclaude login\n\tEOF",
     "cat <<A <<'B'\nx\nA\nclaude login\nB",
     "git log --oneline -3 | head",
+    "git push origin main &>/dev/null",
+    "git push origin main >&2",
+    "git commit -m x 2>&1 | tail -3",
+    "git config --get remote.origin.url",
+    "git config --get-regexp '^alias'",
+    "git config remote.origin.push",
+    "git config core.pager cat",
+    "git log --author=Someone --oneline",
+    "git shortlog --author=X",
+    "env FOO=1 make check-fast",
+    "pnpm exec vitest run --project unit",
+    "npx prettier --check .",
+    "EXOS_LISTEN_HOST=127.0.0.1 node x.js",
+    "docker run --network bridge img",
+    "ssh -L 8080:localhost:80 host",
     "git push --tags origin main",
     "git push --follow-tags",
     "git push -o ci.skip origin feature",
@@ -371,6 +423,25 @@ describe("guard.mjs on Write and Edit", () => {
   });
 });
 
+describe("guard.mjs reads message files named on the command line", () => {
+  const trailer = ["Co-Authored", "By: Someone <a@b.c>"].join("-");
+  const files = {
+    "msg.txt": `feat: x\n\n${trailer}\n`,
+    "clean.txt": "feat: x\n",
+  };
+  it("blocks git commit -F with a trailer inside the file", () => {
+    const r = guard("Bash", { command: "git commit -F msg.txt" }, files);
+    expect(r.decision?.reason.startsWith("no-attribution:")).toBe(true);
+    expect(guard("Bash", { command: "git commit --file=msg.txt" }, files).status).toBe(2);
+  });
+
+  it("allows a clean message file, stdin and a missing file", () => {
+    expect(guard("Bash", { command: "git commit -F clean.txt" }, files).status).toBe(0);
+    expect(guard("Bash", { command: "git commit -F -" }, files).status).toBe(0);
+    expect(guard("Bash", { command: "git commit -F nope.txt" }, files).status).toBe(0);
+  });
+});
+
 describe("guard.mjs robustness", () => {
   it("ignores unrelated tools and malformed input", () => {
     expect(guard("Read", { file_path: "x" }).status).toBe(0);
@@ -427,6 +498,35 @@ describe("stop.sh", () => {
   });
 });
 
+describe("stop.sh timeout", () => {
+  it("kills grandchildren of a command that exceeds the limit", async () => {
+    const pidFile = join(mkdtempSync(join(tmpdir(), "stop-")), "pid");
+    const r = spawnSync("bash", [hook("stop.sh")], {
+      input: JSON.stringify({ stop_hook_active: false }),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        STOP_HOOK_CMD: `sleep 30 & echo $! > ${pidFile}; wait`,
+        STOP_HOOK_TIMEOUT: "1",
+        CLAUDE_PROJECT_DIR: root,
+      },
+    });
+    expect(r.status).toBe(2);
+    const pid = Number(readFileSync(pidFile, "utf8").trim());
+    const alive = () => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const deadline = Date.now() + 5000;
+    while (alive() && Date.now() < deadline) await new Promise((res) => setTimeout(res, 50));
+    expect(alive()).toBe(false);
+  });
+});
+
 describe("format.sh", () => {
   it("is a no-op that exits 0 for missing files, unsupported types and malformed input", () => {
     for (const input of [
@@ -444,17 +544,41 @@ describe("format.sh", () => {
     }
   });
 
-  it("formats a TypeScript file with prettier", () => {
-    const dir = mkdtempSync(join(tmpdir(), "fmt-"));
-    const file = join(dir, "a.ts");
-    writeFileSync(file, "const   a   =  1\n");
-    const r = spawnSync("bash", [hook("format.sh")], {
+  // A throwaway project directory that reuses the repo's prettier through a symlink.
+  function tempProject() {
+    const dir = mkdtempSync(join(tmpdir(), "fmt-project-"));
+    symlinkSync(join(root, "node_modules"), join(dir, "node_modules"));
+    return realpathSync(dir);
+  }
+  const format = (file: string, project: string) =>
+    spawnSync("bash", [hook("format.sh")], {
       input: JSON.stringify({ tool_input: { file_path: file } }),
       encoding: "utf8",
-      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+      env: { ...process.env, CLAUDE_PROJECT_DIR: project },
     });
-    expect(r.status).toBe(0);
+
+  it("formats a TypeScript file inside the project with prettier", () => {
+    const project = tempProject();
+    const file = join(project, "a.ts");
+    writeFileSync(file, "const   a   =  1\n");
+    expect(format(file, project).status).toBe(0);
     expect(readFileSync(file, "utf8")).toBe("const a = 1;\n");
+  });
+
+  it("leaves files outside the project untouched", () => {
+    const project = tempProject();
+    const outside = join(mkdtempSync(join(tmpdir(), "fmt-outside-")), "b.ts");
+    writeFileSync(outside, "const   b   =  2\n");
+    expect(format(outside, project).status).toBe(0);
+    expect(readFileSync(outside, "utf8")).toBe("const   b   =  2\n");
+  });
+
+  it("does not follow a ../ path out of the project", () => {
+    const project = tempProject();
+    const outside = join(mkdtempSync(join(tmpdir(), "fmt-outside-")), "c.ts");
+    writeFileSync(outside, "const   c   =  3\n");
+    expect(format(join(project, "..", "..", outside), project).status).toBe(0);
+    expect(readFileSync(outside, "utf8")).toBe("const   c   =  3\n");
   });
 });
 

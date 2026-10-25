@@ -57,32 +57,63 @@ const LAUNCHERS = new Set([
 
 const block = (rule, message) => ({ rule, message });
 
+let PROJECT_DIR = process.cwd();
+
+/** True when a commit-message or PR-body file named on the command line contains an attribution trailer. */
+function fileHasTrailer(arg) {
+  const name = arg.replace(/^["']|["']$/g, "");
+  if (!name || name === "-") return false;
+  try {
+    return TRAILER.test(readFileSync(path.resolve(PROJECT_DIR, name), "utf8").slice(0, 1_000_000));
+  } catch {
+    return false;
+  }
+}
+
 /** Split a shell command into rough segments at ; && || | and newlines. */
 function segments(command) {
   return command
-    .split(/&&|\|\||[;&|\n]/)
+    .split(/&&|\|\||(?<![<>])&(?!>)|[;|\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
-/** Drop leading env assignments and wrappers so the first word is the real command. */
+const TIMEOUT_RE =
+  /^timeout\s+(?:(?:-s|-k|--signal|--kill-after)(?:=|\s+)\S+\s+|-{1,2}[A-Za-z-]+(?:=\S+)?\s+)*\d+(?:\.\d+)?[smhd]?\s+/;
+const XARGS_RE = /^xargs\s+(?:(?:-[IiLlnPdaEesJ]\s*\S+|--\S+|-[0rtpx]+)\s+)*/;
+// sudo and env take options; options that take an argument are removed together with it.
+const SUDO_ENV_RE =
+  /^(?:sudo|env)\s+(?:(?:-[uCSgGhpUrDRTt]\s+\S+|--(?:user|group|host|prompt|chdir|unset)(?:=\S+|\s+\S+)|--\S*|-[A-Za-z0-9]+)\s+)*/;
+const PLAIN_WRAPPER_RE =
+  /^(?:command|exec|nohup|time|nice|ionice|stdbuf|setsid|caffeinate)\s+(?:-[A-Za-z0-9]+(?:\s+\d+)?\s+)*/;
+const CLAUDE_PKG = String.raw`(?:@anthropic-ai\/claude-code(?:@\S+)?|claude)(?=\s|$)`;
+const NPX_RE = new RegExp(String.raw`^(?:npx|bunx)\s+(?:-\S+\s+)*${CLAUDE_PKG}`);
+const PKG_EXEC_RE = new RegExp(
+  String.raw`^(?:pnpm|npm|yarn)\s+(?:exec|dlx|x)\s+(?:-\S+\s+)*${CLAUDE_PKG}`,
+);
+
+/**
+ * Drops leading wrappers, env assignments, path prefixes and package-runner prefixes until the
+ * first word is the real command. Repeats until stable, so /usr/bin/env -i sudo -E claude works.
+ */
 function stripPrefix(segment) {
-  let s = segment;
-  for (;;) {
+  let s = segment.trim();
+  for (let round = 0; round < 20; round++) {
     const next = s
-      .replace(/^(?:sudo|command|exec|nohup|time|env)\s+/, "")
-      .replace(
-        /^timeout\s+(?:(?:-s|-k|--signal|--kill-after)(?:=|\s+)\S+\s+|-{1,2}[A-Za-z-]+(?:=\S+)?\s+)*\d+(?:\.\d+)?[smhd]?\s+/,
-        "",
-      )
-      .replace(/^xargs\s+(?:(?:-[IiLlnPdaEesJ]\s*\S+|--\S+|-[0rtpx]+)\s+)*/, "")
       .replace(/^(?:[({!]+|then\b|do\b|else\b|elif\b)\s*/, "")
-      .replace(/^-u\s+\S+\s+/, "")
-      .replace(/^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "");
-    // Also drop the directory of the command itself so /opt/homebrew/bin/claude matches `claude`.
-    if (next === s) return s.replace(/^\S*\/(?=[^/\s]+(?:\s|$))/, "");
+      .replace(/^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "")
+      .replace(SUDO_ENV_RE, "")
+      .replace(PLAIN_WRAPPER_RE, "")
+      .replace(TIMEOUT_RE, "")
+      .replace(XARGS_RE, "")
+      .replace(NPX_RE, "claude")
+      .replace(PKG_EXEC_RE, "claude")
+      // the directory of the command itself, so /opt/homebrew/bin/claude matches `claude`
+      .replace(/^\S*\/(?=[^/\s]+(?:\s|$))/, "");
+    if (next === s) return s;
     s = next;
   }
+  return s;
 }
 
 /**
@@ -164,7 +195,7 @@ function splitHeredocs(command) {
       i += 2;
       continue;
     }
-    if (c === "#" && !top().double && (i === 0 || /[\s;&|(]/.test(command[i - 1]))) {
+    if (c === "#" && !top().double && (i === 0 || /[\s;&|()<>]/.test(command[i - 1]))) {
       // An unquoted # at the start of a word is a comment up to the end of the line.
       let end = command.indexOf("\n", i);
       if (end === -1) end = command.length;
@@ -457,11 +488,16 @@ function bashRules(command, depth = 0) {
           at += 1;
         }
       }
+      const hasConfigOverride = tokens
+        .slice(1, at)
+        .some((t) => t === "-c" || t === "--config-env" || t.startsWith("--config-env="));
       const sub = tokens[at];
       if (sub === undefined || !/^[A-Za-z][A-Za-z-]*$/.test(sub)) uncertain = true;
       const pushTokens =
         sub === "push"
-          ? tokens.slice(at + 1)
+          ? hasConfigOverride
+            ? tokens
+            : tokens.slice(at + 1)
           : uncertain && (aliasRisk || tokens.some((t) => /(?:^|=)push$/.test(t)))
             ? tokens
             : null;
@@ -485,21 +521,76 @@ function bashRules(command, depth = 0) {
           "Do not modify git config user.*; the identity is the maintainer's (§1.1).",
         );
       }
-      if (/\s-c\s+user\./.test(seg) || /--author\b/.test(seg)) {
+      if (
+        /\bconfig\b/.test(seg) &&
+        !/--(?:get|get-all|get-regexp|list|show-origin)\b|\s-l\b/.test(seg) &&
+        /(?:^|\s)(?:remote\.\S+\.(?:push|pushurl|mirror)|push\.\S+|alias\.\S+|url\.\S+|branch\.\S+\.pushremote)\s+\S/i.test(
+          seg,
+        )
+      ) {
+        return block(
+          "no-force-push",
+          "Do not set git config that changes what a push does (remote.*.push, push.*, alias.*, url.*): it can force or redirect pushes.",
+        );
+      }
+      if (sub === "commit") {
+        const f = seg.match(/(?:^|\s)(?:-F|--file[= ])\s*("[^"]+"|'[^']+'|\S+)/);
+        if (f && fileHasTrailer(f[1])) {
+          return block(
+            "no-attribution",
+            "The commit message file contains an attribution trailer (§1.1).",
+          );
+        }
+      }
+      const authorScoped =
+        uncertain || ["commit", "commit-tree", "rebase", "am", "merge"].includes(sub);
+      if (/\s-c\s+user\./.test(seg) || (authorScoped && /--author\b/.test(seg))) {
         return block(
           "git-identity",
           "Do not override the git author or committer; commits go out as the maintainer (§1.1).",
         );
       }
     }
+    if (/\bEXOS_IN_CONTAINER\s*=/.test(raw)) {
+      return block(
+        "loopback-only",
+        "EXOS_IN_CONTAINER is set only by the container images; setting it by hand would let a host process bind every interface (rail 3).",
+      );
+    }
+    const listenHost = raw.match(/\bEXOS_LISTEN_HOST\s*=\s*["']?([^\s"']+)/);
+    if (listenHost && !LOOPBACK_HOSTS.has(listenHost[1])) {
+      return block(
+        "loopback-only",
+        `EXOS_LISTEN_HOST=${listenHost[1]} is not a loopback address (rail 3).`,
+      );
+    }
+    if (
+      ["ngrok", "cloudflared", "localtunnel", "lt", "bore", "serveo"].includes(word) ||
+      (word === "tailscale" && /\b(?:funnel|serve)\b/.test(seg)) ||
+      (word === "ssh" && /(?:^|\s)-[A-Za-z]*R/.test(seg))
+    ) {
+      return block(
+        "no-tunnels",
+        "Tunnels and remote port forwards expose local services; none are allowed (rail 3).",
+      );
+    }
+    if (
+      (word === "docker" || word === "docker-compose") &&
+      /(?:^|\s)--(?:network|net)(?:=|\s+)host\b/.test(seg)
+    ) {
+      return block(
+        "loopback-only",
+        "Host networking bypasses the 127.0.0.1 port publishing (rail 3).",
+      );
+    }
     if (LAUNCHERS.has(word) || /--(?:bind|host|hostname|listen|address)\b/.test(seg)) {
-      if (/--auth-file\b|--multiplayer\b/.test(seg)) {
+      if (/--auth-file\b|--multiplayer\b/.test(raw)) {
         return block(
           "loopback-only",
           "--auth-file and --multiplayer are forbidden: loopback only, single owner (rails 3 and 7).",
         );
       }
-      if (/(?:^|[\s=:"'])0\.0\.0\.0\b/.test(seg)) {
+      if (/(?:^|[\s=:"'])0\.0\.0\.0\b/.test(raw)) {
         return block(
           "loopback-only",
           "Binding 0.0.0.0 is forbidden; every listener binds 127.0.0.1 (rail 3).",
@@ -591,6 +682,12 @@ function bashRules(command, depth = 0) {
         "vendor/exo is a pinned read-only submodule (rail 6). Put fixes in patches/ and proposals in docs/upstream/.",
       );
     }
+    if (/(?:^|\/)\.git\/(?:config|hooks\/|info\/|packed-refs|HEAD)/.test(t)) {
+      return block(
+        "git-internals",
+        "Do not write inside .git (config, hooks, refs): it can change push behaviour or the git identity (§1.1).",
+      );
+    }
     if (/(?:^|\/)evals\/datasets\/[^/]+\.test\.jsonl$/.test(t)) {
       return block(
         "immutable-dataset",
@@ -606,14 +703,17 @@ function composeViolation(content) {
   let doc;
   if (parseYaml) {
     try {
-      doc = parseYaml(content);
+      doc = parseYaml(content, { merge: true });
     } catch {
       doc = undefined;
     }
   }
   if (doc && typeof doc === "object" && doc.services && typeof doc.services === "object") {
+    if ("include" in doc) return "compose include: pulls in files this check cannot see";
     for (const [name, svc] of Object.entries(doc.services)) {
       if (!svc || typeof svc !== "object") continue;
+      if ("extends" in svc)
+        return `service ${name} uses extends, which hides ports from this check`;
       if (String(svc.network_mode ?? "") === "host")
         return `service ${name} uses network_mode: host`;
       for (const p of Array.isArray(svc.ports) ? svc.ports : []) {
@@ -646,6 +746,12 @@ function composeViolation(content) {
 function fileRules(rel, content, exists, isEdit) {
   if (!rel || rel.startsWith("../")) return null;
 
+  if (/^(?:.*\/)?\.git(?:\/|$)/.test(rel)) {
+    return block(
+      "git-internals",
+      "Do not write inside .git (config, hooks, refs): it can change push behaviour or the git identity (§1.1).",
+    );
+  }
   if (/^vendor\/exo(\/|$)/.test(rel)) {
     return block(
       "vendor-readonly",
@@ -713,6 +819,7 @@ function fileRules(rel, content, exists, isEdit) {
 }
 
 export function evaluate(input, projectDir = process.cwd()) {
+  PROJECT_DIR = projectDir;
   const tool = input?.tool_name;
   const ti = input?.tool_input ?? {};
   if (tool === "Bash") return bashRules(String(ti.command ?? ""));

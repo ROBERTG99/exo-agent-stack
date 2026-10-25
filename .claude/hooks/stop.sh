@@ -19,8 +19,17 @@ limit="${STOP_HOOK_TIMEOUT:-60}"
 out="$(mktemp)"
 trap 'rm -f "$out"' EXIT
 
-# perl alarm is the portable timeout on macOS (no coreutils `timeout`); exec keeps the pid so the alarm kills the shell.
-(cd "$project" && perl -e 'alarm shift; exec @ARGV' "$limit" bash -c "$cmd") >"$out" 2>&1
+# macOS has no coreutils `timeout`, so perl runs the command in its own process group and kills the
+# whole group on expiry; otherwise make/vitest grandchildren would outlive the limit.
+(cd "$project" && perl -e '
+  my $limit = shift;
+  my $pid = fork();
+  if (!$pid) { setpgrp(0, 0); exec @ARGV; exit 127; }
+  $SIG{ALRM} = sub { kill "TERM", -$pid; select(undef, undef, undef, 1); kill "KILL", -$pid; exit 142; };
+  alarm $limit;
+  waitpid($pid, 0);
+  exit(($? & 127) ? 128 + ($? & 127) : ($? >> 8));
+' "$limit" bash -c "$cmd") >"$out" 2>&1
 status=$?
 
 if [ "$status" -eq 0 ]; then

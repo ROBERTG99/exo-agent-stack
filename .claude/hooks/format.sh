@@ -16,9 +16,17 @@ case "$file" in
   *) exit 0 ;;
 esac
 
-project="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+project="$(cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" 2>/dev/null && pwd -P)" || exit 0
 prettier="$project/node_modules/.bin/prettier"
 [ -x "$prettier" ] || exit 0
+
+# Only files inside the project are formatted (never scratch files or other repositories).
+dir="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)" || exit 0
+file="$dir/$(basename "$file")"
+case "$file" in
+  "$project"/*) ;;
+  *) exit 0 ;;
+esac
 
 (cd "$project" && "$prettier" --write --log-level silent "$file") >/dev/null 2>&1 || true
 exit 0
