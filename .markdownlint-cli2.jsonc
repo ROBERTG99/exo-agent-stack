@@ -1,0 +1,22 @@
+{
+  "globs": ["**/*.md"],
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": { "siblings_only": true },
+    "MD033": false,
+    "MD036": false,
+    "MD041": false,
+    "MD060": false,
+  },
+  "ignores": [
+    "node_modules/**",
+    "vendor/**",
+    "BUILD.md",
+    "START.md",
+    "docs/specs/**",
+    ".exos-state/**",
+    "**/node_modules/**",
+    "evals/reports/**",
+  ],
+}

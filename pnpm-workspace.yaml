@@ -1,0 +1,15 @@
+packages:
+  - packages/*
+  - stackd
+  - bridge
+  - doctor
+  - cli
+  - dashboard
+  - fake-model
+  - data/generator
+  - evals/runner
+  - harnesses/*
+  - tools
+
+onlyBuiltDependencies:
+  - esbuild

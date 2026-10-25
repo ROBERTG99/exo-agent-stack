@@ -64,7 +64,14 @@ describe("T-01 bootstrap layout", () => {
 
   it("extends .gitignore per §1.2 without ignoring lockfiles", () => {
     const g = read(".gitignore");
-    for (const needle of [".env.*", "!.env.example", ".exos-state/", "vendor/exo/target/", "evals/reports/*.json", "!evals/reports/baseline*.json"]) {
+    for (const needle of [
+      ".env.*",
+      "!.env.example",
+      ".exos-state/",
+      "vendor/exo/target/",
+      "evals/reports/*.json",
+      "!evals/reports/baseline*.json",
+    ]) {
       expect(g, needle).toContain(needle);
     }
     expect(g).not.toMatch(/lock/i);
@@ -77,7 +84,17 @@ describe("T-01 bootstrap layout", () => {
 
   it("DEVELOPMENT.md records the detected environment", () => {
     const text = read("docs/DEVELOPMENT.md");
-    for (const needle of ["node", "pnpm", "uv", "cargo", "docker", "claude", "/dev/kvm", "Darwin", "arm64"]) {
+    for (const needle of [
+      "node",
+      "pnpm",
+      "uv",
+      "cargo",
+      "docker",
+      "claude",
+      "/dev/kvm",
+      "Darwin",
+      "arm64",
+    ]) {
       expect(text, needle).toContain(needle);
     }
   });

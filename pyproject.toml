@@ -1,0 +1,12 @@
+[project]
+name = "exo-agent-stack-evals"
+version = "0.1.0"
+description = "Python side of exo-agent-stack: evalgate gate only. All stack code is TypeScript."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+# evalgate is added in T-39 (git+https://github.com/ROBERTG99/evalgate@v0.1.0).
+dependencies = []
+
+[tool.uv]
+package = false

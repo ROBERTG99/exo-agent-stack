@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+vendor
+.exos-state
+pnpm-lock.yaml
+uv.lock
+docs/specs
+docs/images
+evals/reports
+*.md
+*.mdc
+dashboard/src/api/schema.d.ts
+playwright-report
+test-results

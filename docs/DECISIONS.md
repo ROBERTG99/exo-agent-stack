@@ -31,3 +31,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Decision:** do not clone `vendor/exo` until the maintainer confirms the URL. Continue with every task that does not need the Exo sources (M0 tooling, fake model, stackd store, generator, ...), build against the §4.2 surface as documented in the spec, and mark everything that needs the pin as blocked.
 - **Alternatives:** (a) clone `https://github.com/exoharness/exo` anyway (found via web search; blocked by the permission classifier, and a wrong guess would pull untrusted code into the tree); (b) invent a `vendor/exo` stub (violates "never fake the missing part").
 - **Reason:** BUILD.md §0.1 rail 8 and §20 (a): a required dependency is unreachable without a trusted source. The fallback in §1.3 covers a failed *build*, not an unknown *source*.
+
+## 2026-10-25 · TypeScript pinned to 6.0.x, not 7.0
+
+- **Decision:** `typescript@~6.0.3` for the whole workspace.
+- **Alternatives:** TypeScript 7.0.2 (latest); running typescript-eslint against a side-by-side TS 6 install.
+- **Reason:** `eslint` fails at startup with "typescript-eslint does not support TS 7.0" (typescript-eslint 8.72.0). Lint is a required gate (BUILD.md §12), so the latest version that every tool supports wins. Revisit when typescript-eslint supports TS >= 7.1.
