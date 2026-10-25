@@ -78,3 +78,11 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Alternatives:** compile in a `node:22` (full) build stage; switch to the built-in `node:sqlite`; install a toolchain in `node:22-slim` (forbidden: no `apt-get`).
 - **Evidence:** the 35 DB and CLI unit tests pass with the locally compiled `build/` directory moved away; the stackd image builds on `node:22-slim` aarch64.
 - **Follow-up (T-23/T-47):** when stackd opens its database inside the image, the runtime stage must carry the `better-sqlite3` package directory (it is external to the bundle) and the migrations directory (`EXOS_MIGRATIONS_DIR`).
+
+## 2026-10-25 · Mode A launcher: flags, hidden option, setting sources
+
+- **`--permission-prompt-tool` is hidden from `claude --help` but supported.** `claude --help` (2.1.212, recorded in `fixtures/claude-help/claude-help.txt`) does not list it. A static search of the installed binary (`grep -a -c -- "permission-prompt-tool"` gives 14 hits, no execution) finds its handler and error messages, so the design of BUILD.md §4.7 stands. The flag is listed in `fixtures/claude-help/hidden-flags.txt` with that evidence; its live behaviour is confirmed by the maintainer with `make live-claude`.
+- **Two flags beyond the spec's list, both present in `claude --help`:** `--strict-mcp-config` (the maintainer's global MCP servers do not load into an unattended run) and `--setting-sources local` (only the `settings.local.json` written for the turn supplies permission rules, so a user-level allow rule cannot bypass the approvals gate; authentication is unaffected).
+- **Alternatives:** relying on `--permission-mode` alone (does not route prompts to Exo); leaving user and project settings active (a global `Bash(*)` allow would skip the gate).
+- **Stream format:** `fixtures/claude-stream/sample.ndjson` is hand-written from the public description of stream-json, not recorded (the agent never makes a model call). The parser ignores unknown fields and types.
+- **V-7 assumption:** `messages.usage.prompt_tokens` = uncached input + cache creation + cache reads; `cost_usd` = Claude Code's own `total_cost_usd` (an API-rate estimate).

@@ -54,3 +54,9 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 
 - **What:** `tools/ask-user.ts`, `tools/run-checks.ts` and `tools/write-report.ts` implement the behaviour (strict schemas, 600 s process-group timeout, ANSI-free 4000 character summaries, versioned idempotent reports, 1 MB limit) with 34 unit tests, and export JSON-schema declarations. Exo loads tools by module path with `defineTool`, whose signature and the artifact-writing API behind `ArtifactStore` are unverified (new verification item V-13).
 - **Closes when:** T-09 reads the tool-module contract in the pinned source; the wrapper is then a few lines per tool.
+
+## Mode A: launcher done, Exo adapter and live behaviour not verified
+
+- **What:** `harnesses/claude-host/` implements and tests (77 unit tests, including an end-to-end run against a fake `claude` that rejects unknown flags): the scrubbed child environment, the deny list and bypass-disabled settings, the path-guard hook, argument building checked against the recorded help, the stream-json parser with usage mapping, the approvals broker and MCP server, abort and `claude_not_found`. Not done: the `defineHarness` module that Exo loads (`harnesses/claude-host/harness.ts`, blocked on V-12 like the scripted harness) and saving the Claude session id as an artifact for `--resume`.
+- **Not verified without the maintainer:** how the real binary behaves with the generated settings and `--permission-prompt-tool` (`make live-claude`), and whether the real stream matches the hand-written sample.
+- **Residual risk (BUILD.md §15.5):** Mode A has no isolation beyond the worktree mount, the deny list, the path-guard hook and approvals; Bash is not path-restricted by the hook. Use Mode B for untrusted repositories.

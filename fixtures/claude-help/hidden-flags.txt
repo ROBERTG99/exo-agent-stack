@@ -1,0 +1,7 @@
+# Flags the harness uses that `claude --help` (2.1.212, recorded in claude-help.txt) does not list.
+# Evidence: static search of the installed binary, no execution:
+#   grep -a -c -- "permission-prompt-tool" /opt/homebrew/Caskroom/claude-code/2.1.212/claude   -> 14
+# The binary contains the handler and its messages ("MCP tool ... (passed via --permission-prompt-tool)
+# not found", "... must be an MCP tool"), so the flag is supported but hidden.
+# Behaviour of the flag in a live run is confirmed by the maintainer with `make live-claude`.
+--permission-prompt-tool
