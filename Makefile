@@ -4,6 +4,15 @@ SHELL := /bin/bash
 
 PNPM ?= pnpm
 COMPOSE ?= docker compose
+# Claude Code on the web needs host-network builds (Appendix A); classic builder, no bake.
+ifeq ($(CLAUDE_CODE_REMOTE),true)
+COMPOSE := docker compose -f compose.yaml -f compose.cloud.yaml
+export COMPOSE_BAKE := false
+endif
+
+# Containers run as the invoking user so the bind-mounted state directory stays writable on Linux.
+export EXOS_UID ?= $(shell id -u)
+export EXOS_GID ?= $(shell id -g)
 
 # Targets whose task is not built yet fail loudly instead of pretending to pass.
 define NOT_YET
@@ -25,11 +34,12 @@ bootstrap: ## Install toolchains and dependencies, create .env from .env.example
 
 .PHONY: up
 up: ## Start the full stack in Docker Compose with healthchecks
-	$(call NOT_YET,T-47)
+	mkdir -p .exos-state/compose
+	$(COMPOSE) up -d --build --wait
 
 .PHONY: down
 down: ## Stop the stack
-	$(call NOT_YET,T-47)
+	$(COMPOSE) down --remove-orphans
 
 .PHONY: seed
 seed: ## Load the synthetic dataset with a fixed seed
@@ -37,11 +47,11 @@ seed: ## Load the synthetic dataset with a fixed seed
 
 .PHONY: demo
 demo: ## Run the scripted demo scenario against the running stack, offline
-	$(call NOT_YET,T-50)
+	$(PNPM) exec tsx scripts/demo.ts
 
 .PHONY: logs
 logs: ## Follow the logs of every service
-	$(call NOT_YET,T-47)
+	$(COMPOSE) logs -f
 
 .PHONY: clean
 clean: ## Remove containers, volumes, caches and build outputs

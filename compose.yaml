@@ -1,0 +1,79 @@
+# Default stack: Exo is replaced by WireMock (placeholder/recorded API), the model by the fake model.
+# Every published port is 127.0.0.1-only (BUILD.md §0.1 rail 3). Containers need no outbound network.
+name: exo-agent-stack
+
+x-build-args: &build-args
+  HTTPS_PROXY: "${HTTPS_PROXY:-}"
+
+services:
+  wiremock:
+    image: wiremock/wiremock:3.13.2
+    command: ["--disable-banner"]
+    volumes:
+      - ./deploy/wiremock:/home/wiremock:ro
+    ports:
+      - "127.0.0.1:9841:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/__admin/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  fake-model:
+    build:
+      context: .
+      dockerfile: docker/fake-model.Dockerfile
+      args: *build-args
+    environment:
+      EXOS_LISTEN_HOST: container
+      EXOS_IN_CONTAINER: "1"
+      EXOS_FAKE_MODEL_PORT: "9840"
+    ports:
+      - "127.0.0.1:9840:9840"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9840/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
+  stackd:
+    build:
+      context: .
+      dockerfile: docker/stackd.Dockerfile
+      args: *build-args
+    user: "${EXOS_UID:-1000}:${EXOS_GID:-1000}"
+    depends_on:
+      wiremock:
+        condition: service_healthy
+      fake-model:
+        condition: service_healthy
+    environment:
+      EXOS_LISTEN_HOST: container
+      EXOS_IN_CONTAINER: "1"
+      EXOS_STACKD_PORT: "9812"
+      EXOS_STATE_DIR: /state
+      EXOS_EXO_URL: http://wiremock:8080/exo
+    volumes:
+      - ./.exos-state/compose:/state
+    ports:
+      - "127.0.0.1:9812:9812"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9812/api/v1/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s

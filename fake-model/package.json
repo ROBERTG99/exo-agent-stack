@@ -1,0 +1,17 @@
+{
+  "name": "@exos/fake-model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "node ../scripts/bundle.mjs fake-model"
+  },
+  "dependencies": {
+    "@exos/common": "workspace:*",
+    "fastify": "^5.0.0"
+  },
+  "exports": {
+    "./server": "./src/server.ts"
+  }
+}

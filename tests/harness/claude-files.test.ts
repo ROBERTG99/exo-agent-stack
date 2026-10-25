@@ -200,7 +200,7 @@ describe("subagents", () => {
     const fm = frontmatter(t);
     expect(fm, "frontmatter").not.toBeNull();
     expect(fm!.name).toBe(name);
-    expect(fm!.description.length).toBeGreaterThan(20);
+    expect((fm!.description ?? "").length).toBeGreaterThan(20);
     expect(fm!.model).toBe(want.model);
     expect(fm!.tools).toBeTruthy();
     if (want.readOnly) expect(fm!.tools).not.toMatch(/\b(Write|Edit|NotebookEdit)\b/);
@@ -254,7 +254,7 @@ describe("skills", () => {
     expect(existsSync(join(root, p))).toBe(true);
     const fm = frontmatter(read(p));
     expect(fm?.name).toBe(s);
-    expect(fm?.description.length).toBeGreaterThan(20);
+    expect((fm?.description ?? "").length).toBeGreaterThan(20);
   });
 
   it("rotate-setup-token never executes sign-in commands itself", () => {

@@ -43,7 +43,7 @@ Status: `todo`, `doing`, `done`, `blocked`. Evidence is the command and a one-li
 | T-03 | Workspace, Makefile, env example | M0 | done | `make bootstrap && make check-fast`: lint clean, 90 unit/harness tests passed (make-targets: every §16 target defined, phony, `make -n` ok; env-example) ; `make typecheck` clean |
 | T-04 | Claude Code harness files | M0 | done | `make check-fast`: 151 tests passed (claude-files.test.ts: 61 — rails and subagent rules verbatim from spec, 13 agents with routing-table models, 14 skills, settings, .mcp.json); markdownlint 43 files clean |
 | T-05 | Hooks | M0 | done | `make check-fast`: 242 tests passed; hooks.test.ts covers guard (setup-token, key assignment/literal, 0.0.0.0, live target, trailer, force push, git identity, vendor/exo, immutable datasets) with allow-cases, stop loop, timeout, format, session-start dry run, registration. Settings hardened after two automated security reviews (bounded allow list, .env denies, guard recursion, destructive-push and loopback allowlist rules); 272 harness tests pass |
-| T-06 | Walking skeleton | M0 | todo | |
+| T-06 | Walking skeleton | M0 | done | `make up`: wiremock, fake-model, stackd all healthy (19 s warm build); `make demo` lists 7 agents through stackd; unauthenticated 401, wrong Host 403, cross-site Origin 403; token mode 0600; `lsof` shows only 127.0.0.1 listeners; `pnpm exec vitest run --project integration`: 18 passed; `make check-fast`: 333 unit/harness tests passed; `make typecheck` clean; hadolint clean. Exo responses are a hand-written placeholder (docs/KNOWN_LIMITATIONS.md) |
 | T-07 | exo-client [FR-8] | M1 | todo | |
 | T-08 | Recordings and contract tests [FR-8] | M1 | todo | |
 | T-09 | Verification log [FR-1] | M1 | todo | |

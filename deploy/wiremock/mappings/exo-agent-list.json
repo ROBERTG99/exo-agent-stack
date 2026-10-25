@@ -1,0 +1,14 @@
+{
+  "name": "exo-agent-list (placeholder: hand-written until T-08 records it from a real Exo)",
+  "request": {
+    "method": "GET",
+    "urlPath": "/exo/agent"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"agents\": [{\"id\": \"agent-1\", \"slug\": \"repo-builder\", \"name\": \"repo-builder\", \"harness\": \"claude-host\"}, {\"id\": \"agent-2\", \"slug\": \"repo-builder-b\", \"name\": \"repo-builder-b\", \"harness\": \"claude-sandboxed\"}, {\"id\": \"agent-3\", \"slug\": \"reviewer-cursor\", \"name\": \"reviewer-cursor\", \"harness\": \"cursor\"}, {\"id\": \"agent-4\", \"slug\": \"dual-review\", \"name\": \"dual-review\", \"harness\": \"claude-host\"}, {\"id\": \"agent-5\", \"slug\": \"local-harness\", \"name\": \"local-harness\", \"harness\": \"exo-adapter\"}, {\"id\": \"agent-6\", \"slug\": \"ops-slack\", \"name\": \"ops-slack\", \"harness\": \"claude-host\"}, {\"id\": \"agent-7\", \"slug\": \"researcher\", \"name\": \"researcher\", \"harness\": \"claude-host\"}]}"
+  }
+}

@@ -1,0 +1,10 @@
+# Override used only on Claude Code on the web (BUILD.md Appendix A): builds need host networking
+# and the proxy build argument because the container network cannot reach package registries.
+# Applied by the Makefile when CLAUDE_CODE_REMOTE=true. Not exercised on a normal machine.
+services:
+  fake-model:
+    build:
+      network: host
+  stackd:
+    build:
+      network: host

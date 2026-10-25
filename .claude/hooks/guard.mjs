@@ -75,52 +75,160 @@ function stripPrefix(segment) {
   }
 }
 
-/** Bodies of $(...), <(...) and >(...), with nesting; single-quoted text is skipped. */
-function balancedSubstitutions(command) {
-  const out = [];
-  for (let i = 0; i < command.length; i++) {
-    if (command[i] === "'") {
-      const end = command.indexOf("'", i + 1);
-      if (end === -1) break;
-      i = end;
+/**
+ * Replaces the inside of terminated single-quoted strings with spaces. A single quote inside double
+ * quotes is literal text, not a quote. Unterminated quotes are left untouched, so whatever follows
+ * is still inspected (fail closed).
+ */
+function maskSingleQuoted(text) {
+  const out = text.split("");
+  let inDouble = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\\") {
+      i++;
       continue;
     }
-    if (
-      (command[i] === "$" || command[i] === "<" || command[i] === ">") &&
-      command[i + 1] === "("
-    ) {
+    if (inDouble) {
+      if (c === '"') inDouble = false;
+      continue;
+    }
+    if (c === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (c === "'") {
+      const end = text.indexOf("'", i + 1);
+      if (end === -1) break;
+      for (let k = i + 1; k < end; k++) if (text[k] !== "\n") out[k] = " ";
+      i = end;
+    }
+  }
+  return out.join("");
+}
+
+/** Bodies of $(...), <(...) and >(...), with nesting; text inside terminated single quotes is skipped. */
+function balancedSubstitutions(command) {
+  const masked = maskSingleQuoted(command);
+  const out = [];
+  for (let i = 0; i < masked.length - 1; i++) {
+    if ((masked[i] === "$" || masked[i] === "<" || masked[i] === ">") && masked[i + 1] === "(") {
       let depth = 1;
       let j = i + 2;
-      for (; j < command.length && depth > 0; j++) {
-        if (command[j] === "(") depth++;
-        else if (command[j] === ")") depth--;
+      for (; j < masked.length && depth > 0; j++) {
+        if (masked[j] === "(") depth++;
+        else if (masked[j] === ")") depth--;
       }
-      if (depth === 0) out.push(command.slice(i + 2, j - 1));
-      else out.push(command.slice(i + 2)); // unbalanced: still inspect what follows
+      out.push(depth === 0 ? command.slice(i + 2, j - 1) : command.slice(i + 2));
     }
   }
   return out;
 }
 
-const HEREDOC = /<<-?[ \t]*(["']?)([A-Za-z_]\w*)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2[ \t]*(?=\n|$)/g;
-
 /**
- * Separates heredoc bodies from the command text. A quoted heredoc (<<'EOF') is literal data; an
- * unquoted one still undergoes $(...) and backtick expansion, so only its substitutions matter.
- * Neither body is a sequence of commands, so segment analysis must not see them.
+ * Removes the bodies of well-formed heredocs from the command text. A small lexer tracks single and
+ * double quotes and $(...) frames, so a "<<" inside a quoted string is not mistaken for a heredoc,
+ * and a here-string (<<<) is not one either. A body is removed only when its delimiter line is found;
+ * an unterminated heredoc stays in the text and is analysed like any other command. A quoted
+ * heredoc (<<'EOF') is literal data; an unquoted one still undergoes $(...) and backtick expansion,
+ * so only its substitutions are inspected.
  */
 function splitHeredocs(command) {
   const bodies = [];
-  const code = command.replace(HEREDOC, (match, quote, _tag, body) => {
-    bodies.push({ quoted: quote !== "", text: body });
-    return match.slice(0, match.indexOf("\n"));
-  });
+  const pending = [];
+  const frames = [{ double: false, depth: 0 }];
+  const top = () => frames[frames.length - 1];
+  let code = "";
+  let single = false;
+  let i = 0;
+  while (i < command.length) {
+    const c = command[i];
+    if (single) {
+      code += c;
+      if (c === "'") single = false;
+      i++;
+      continue;
+    }
+    if (c === "\\") {
+      code += command.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c === "'" && !top().double) {
+      single = true;
+      code += c;
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      top().double = !top().double;
+      code += c;
+      i++;
+      continue;
+    }
+    if ((c === "$" || ((c === "<" || c === ">") && !top().double)) && command[i + 1] === "(") {
+      frames.push({ double: false, depth: 0 });
+      code += command.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (frames.length > 1) {
+      if (c === "(") top().depth++;
+      else if (c === ")") {
+        if (top().depth > 0) top().depth--;
+        else frames.pop();
+      }
+    }
+    if (
+      c === "<" &&
+      command[i + 1] === "<" &&
+      command[i + 2] !== "<" &&
+      command[i - 1] !== "<" &&
+      !top().double
+    ) {
+      const m = command.slice(i).match(/^<<(-?)[ \t]*(?:(["'])([^"'\n]+)\2|(\\?)([A-Za-z_]\w*))/);
+      if (m) {
+        pending.push({
+          tag: m[3] ?? m[5],
+          quoted: m[2] !== undefined || m[4] === "\\",
+          strip: m[1] === "-",
+        });
+        code += m[0];
+        i += m[0].length;
+        continue;
+      }
+    }
+    if (c === "\n" && pending.length && !top().double) {
+      code += c;
+      i++;
+      for (const h of pending) {
+        const start = i;
+        const body = [];
+        let found = false;
+        while (i < command.length) {
+          let end = command.indexOf("\n", i);
+          if (end === -1) end = command.length;
+          const line = command.slice(i, end);
+          i = Math.min(end + 1, command.length);
+          if ((h.strip ? line.replace(/^\t+/, "") : line) === h.tag) {
+            found = true;
+            break;
+          }
+          body.push(line);
+        }
+        if (found) bodies.push({ quoted: h.quoted, text: body.join("\n") });
+        else {
+          code += command.slice(start);
+          i = command.length;
+        }
+      }
+      pending.length = 0;
+      continue;
+    }
+    code += c;
+    i++;
+  }
   return { code, bodies };
-}
-
-/** Replaces the inside of single-quoted strings with spaces (they are never expanded by the shell). */
-function maskSingleQuoted(text) {
-  return text.replace(/'[^']*'/g, (m) => " ".repeat(m.length));
 }
 
 /** Command strings hidden inside bash -c, eval, $(...) and backticks, so indirection cannot dodge the rules. */
@@ -236,16 +344,55 @@ function bashRules(command, depth = 0) {
     }
     if (/^git\b/.test(seg)) {
       const tokens = seg.split(/\s+/).map((t) => t.replace(/^["'`(]+|["'`);&]+$/g, ""));
-      // The subcommand is the first word after git's global options (-C <dir>, -c k=v, --git-dir=...).
+      // The subcommand is the first word after git's global options. Anything unrecognised makes the
+      // parse uncertain, and an uncertain parse that mentions "push" is treated as a push.
+      const takesArg = new Set([
+        "-C",
+        "-c",
+        "--git-dir",
+        "--work-tree",
+        "--namespace",
+        "--config-env",
+      ]);
+      const noArg = new Set([
+        "-p",
+        "-P",
+        "--paginate",
+        "--no-pager",
+        "--bare",
+        "--no-replace-objects",
+        "--literal-pathspecs",
+        "--glob-pathspecs",
+        "--noglob-pathspecs",
+        "--icase-pathspecs",
+        "--no-optional-locks",
+      ]);
       let at = 1;
+      let uncertain = false;
       while (at < tokens.length && tokens[at].startsWith("-")) {
-        const takesArg = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"];
-        at += takesArg.includes(tokens[at]) ? 2 : 1;
+        const t = tokens[at];
+        if (takesArg.has(t)) {
+          if (t === "-c" && /^alias\./i.test(tokens[at + 1] ?? "")) uncertain = true;
+          at += 2;
+        } else if (
+          noArg.has(t) ||
+          /^--(?:git-dir|work-tree|namespace|config-env|exec-path)=/.test(t)
+        ) {
+          at += 1;
+        } else {
+          uncertain = true;
+          at += 1;
+        }
       }
       const sub = tokens[at];
-      // If the subcommand cannot be determined, fall back to the loose "push anywhere" reading.
-      const pushTokens = sub === "push" ? tokens.slice(at + 1) : sub === undefined ? tokens : null;
-      if (pushTokens && (sub === "push" || tokens.includes("push"))) {
+      if (sub === undefined || !/^[A-Za-z][A-Za-z-]*$/.test(sub)) uncertain = true;
+      const pushTokens =
+        sub === "push"
+          ? tokens.slice(at + 1)
+          : uncertain && tokens.some((t) => /(?:^|=)push$/.test(t))
+            ? tokens
+            : null;
+      if (pushTokens) {
         const destructive = pushTokens.some(
           (t) =>
             ["--force", "--force-with-lease", "--delete", "--mirror", "--prune"].includes(t) ||
