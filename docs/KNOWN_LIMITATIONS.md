@@ -32,3 +32,9 @@ What is not done or not verified, and why. Updated as the build progresses; ever
 
 - **What:** `.claude/hooks/guard.mjs` inspects command text; it is not a sandbox and cannot parse all of shell. Residual gaps are listed in `docs/DECISIONS.md` (guard hardening entries).
 - **Consequence:** the deny list, the permission classifier, milestone reviews and `make security` are the authoritative controls.
+
+## `packages/exo-client` response shapes are unverified
+
+- **What:** the client follows the endpoint table of BUILD.md §4.2 (paths, request bodies, event names). Response bodies are validated only for the members the stack relies on (for example `agents[].id`, `turn` or `turn.id`, `active`, `events[].id`/`type`); the SSE framing (`id:`/`data:` with an `id` field in the JSON) and the event-list envelope (`{events}` or a bare array) are assumptions. V-1 (bearer token), V-10 (health probe) and V-11 (managed-agent body) are not implemented beyond an optional bearer token.
+- **Consequence:** the 34 client tests prove behaviour against an in-process stub, not against Exo.
+- **Closes when:** T-09 verifies each item against the pinned source and T-08 re-records fixtures from a real Exo.

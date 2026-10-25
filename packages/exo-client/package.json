@@ -1,0 +1,13 @@
+{
+  "name": "@exos/exo-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "undici": "^8.12.3",
+    "zod": "^4.6.7"
+  }
+}
