@@ -165,12 +165,12 @@ agents-sync: ## Sync agent definitions into Exo
 	$(PNPM) exec tsx cli/src/main.ts agents sync
 
 .PHONY: host-up
-host-up: ## Native Exo, stackd and bridge
-	$(call NOT_YET,T-33)
+host-up: ## Native Exo (or its simulator), stackd and bridge on 127.0.0.1
+	scripts/host-up.sh up
 
 .PHONY: host-down
 host-down: ## Stop the native stack
-	$(call NOT_YET,T-33)
+	scripts/host-up.sh down
 
 .PHONY: record-exo-fixtures
 record-exo-fixtures: ## Host-only: re-record the Exo fixtures from a real Exo and compare shapes

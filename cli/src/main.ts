@@ -5,6 +5,7 @@ import { agentsCommand } from "./commands/agents.ts";
 import { auditCommand } from "./commands/audit.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { dualReviewCommand } from "./commands/dual-review.ts";
+import { hostCommand } from "./commands/host.ts";
 
 export interface CommandIo {
   env: Record<string, string | undefined>;
@@ -19,6 +20,7 @@ export const commands: Record<string, Command> = {
   audit: auditCommand,
   doctor: doctorCommand,
   "dual-review": dualReviewCommand,
+  host: hostCommand,
 };
 
 export async function run(argv: string[], io: CommandIo): Promise<number> {

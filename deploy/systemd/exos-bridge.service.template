@@ -1,0 +1,24 @@
+# exos bridge: the MCP bridge.
+# A user unit (systemctl --user): it runs as you, restarts when it exits, and listens on 127.0.0.1
+# only. Rendered by `exos host render --platform systemd`; do not edit the rendered copy.
+[Unit]
+Description=exos bridge: the MCP bridge
+After=exos-stackd.service
+Wants=exos-stackd.service
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+ExecStart=@NODE@ --import tsx bridge/src/server.ts
+Environment=EXOS_STATE_DIR=@STATE_DIR@
+Environment=EXOS_LISTEN_HOST=127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+StandardOutput=append:@STATE_DIR@/logs/bridge.log
+StandardError=append:@STATE_DIR@/logs/bridge.log
+
+[Install]
+WantedBy=default.target

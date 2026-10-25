@@ -1,0 +1,22 @@
+# exos exo: Exo, the agent runtime (pinned build).
+# A user unit (systemctl --user): it runs as you, restarts when it exits, and listens on 127.0.0.1
+# only. Rendered by `exos host render --platform systemd`; do not edit the rendered copy.
+[Unit]
+Description=exos exo: Exo, the agent runtime (pinned build)
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+ExecStart=@EXO_BIN@ --root @STATE_DIR@/exo run --serve --bind 127.0.0.1:9810
+Environment=EXOS_STATE_DIR=@STATE_DIR@
+Environment=EXOS_LISTEN_HOST=127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+StandardOutput=append:@STATE_DIR@/logs/exo.log
+StandardError=append:@STATE_DIR@/logs/exo.log
+
+[Install]
+WantedBy=default.target

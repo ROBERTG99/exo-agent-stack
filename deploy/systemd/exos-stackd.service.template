@@ -1,0 +1,25 @@
+# exos stackd: the stack's API, credit guard and recovery supervisor.
+# A user unit (systemctl --user): it runs as you, restarts when it exits, and listens on 127.0.0.1
+# only. Rendered by `exos host render --platform systemd`; do not edit the rendered copy.
+[Unit]
+Description=exos stackd: the stack's API, credit guard and recovery supervisor
+After=exos-exo.service
+Wants=exos-exo.service
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+ExecStart=@NODE@ --import tsx stackd/src/server.ts
+Environment=EXOS_STATE_DIR=@STATE_DIR@
+Environment=EXOS_LISTEN_HOST=127.0.0.1
+Environment=EXOS_ALLOWED_WORKSPACE_ROOTS=@WORKSPACE_ROOTS@
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+StandardOutput=append:@STATE_DIR@/logs/stackd.log
+StandardError=append:@STATE_DIR@/logs/stackd.log
+
+[Install]
+WantedBy=default.target
