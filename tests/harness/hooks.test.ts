@@ -130,6 +130,23 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     ["git --weird-opt push --force", "no-force-push"],
     ["git -c alias.zz=push zz --force", "no-force-push"],
     ["git $(echo push) --force", "no-force-push"],
+    // review round 5: abbreviations, separators, comments, git config env
+    ["git push --forc origin main", "no-force-push"],
+    ["git push --del origin x", "no-force-push"],
+    ["git push --mir", "no-force-push"],
+    ["git push --pru origin", "no-force-push"],
+    ["git push --force-w origin main", "no-force-push"],
+    ["git push --receive-pack=evil origin main", "no-force-push"],
+    ["git --config-env=alias.zz=ALIASVAR zz --force", "no-force-push"],
+    ["git --config-env alias.zz=ALIASVAR zz --force", "no-force-push"],
+    ["sleep 1 & claude login", "no-signin"],
+    ["(claude login)", "no-signin"],
+    ["{ claude login; }", "no-signin"],
+    ["! claude login", "no-signin"],
+    ["if true; then claude login; fi", "no-signin"],
+    ["# <<'X'\nclaude login\nX", "no-signin"],
+    ["GIT_CONFIG_COUNT=1 git commit -m x", "git-identity"],
+    ["GIT_CONFIG_PARAMETERS='user.name=x' git commit -m x", "git-identity"],
     // loopback allowlists
     ["exo run --serve --bind 10.0.0.5:9810", "loopback-only"],
     ["node server.js --host example.com", "loopback-only"],
@@ -182,6 +199,14 @@ describe("guard.mjs blocks §0.1 violations in Bash", () => {
     "cat <<-'EOF'\n\tclaude login\n\tEOF",
     "cat <<A <<'B'\nx\nA\nclaude login\nB",
     "git log --oneline -3 | head",
+    "git push --tags origin main",
+    "git push --follow-tags",
+    "git push -o ci.skip origin feature",
+    "git push --recurse-submodules=check origin main",
+    "git push --dry-run -v origin main",
+    "sleep 1 & echo hi",
+    "ls 2>&1 | head",
+    "echo done &",
     "git -C /tmp/x push origin main",
     "git push origin feature",
     "docker compose -p demo up -d",
@@ -235,6 +260,47 @@ describe("guard.mjs on Write and Edit", () => {
         .status,
     ).toBe(2);
     expect(write("docs/vendor-notes.md", "x").status).toBe(0);
+  });
+
+  describe("compose files are parsed, not pattern-matched", () => {
+    const compose = (ports: string, extra = "") =>
+      `services:\n  a:\n    image: x\n${extra}    ports:\n${ports}`;
+    it.each([
+      ["long syntax without host_ip", compose("      - target: 80\n        published: 8080\n")],
+      ["container-only short syntax", compose('      - "9800"\n')],
+      ["a range without host ip", compose('      - "9800-9810:9800-9810"\n')],
+      ["a numeric entry", compose("      - 9800\n")],
+      ["host network mode", compose('      - "127.0.0.1:9800:9800"\n', "    network_mode: host\n")],
+      [
+        "an all-interfaces host_ip",
+        compose("      - target: 80\n        published: 8080\n        host_ip: 192.168.1.5\n"),
+      ],
+    ])("blocks %s", (_name, content) => {
+      expect(write("compose.yaml", content).decision?.reason.startsWith("loopback-only:")).toBe(
+        true,
+      );
+    });
+
+    it.each([
+      ["short syntax with 127.0.0.1", compose('      - "127.0.0.1:9800:9800"\n')],
+      ["short syntax with [::1]", compose('      - "[::1]:9800:9800"\n')],
+      [
+        "long syntax with host_ip",
+        compose("      - target: 80\n        published: 8080\n        host_ip: 127.0.0.1\n"),
+      ],
+      ["a service without ports", "services:\n  a:\n    image: x\n"],
+    ])("allows %s", (_name, content) => {
+      expect(write("compose.yaml", content).status).toBe(0);
+    });
+
+    it("still catches a bad port line in an Edit fragment that is not valid YAML on its own", () => {
+      const r = guard("Edit", {
+        file_path: "compose.yaml",
+        old_string: "a",
+        new_string: '      - "9800:9800"\n',
+      });
+      expect(r.status).toBe(2);
+    });
   });
 
   it("blocks non-loopback binds in deployment files but allows docs and doctor to mention them", () => {

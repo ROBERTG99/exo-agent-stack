@@ -8,6 +8,14 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The yaml package is a repo devDependency; if it is missing the compose check falls back to a regex.
+let parseYaml = null;
+try {
+  ({ parse: parseYaml } = await import("yaml"));
+} catch {
+  parseYaml = null;
+}
+
 // Sensitive patterns are assembled from parts so this file never matches its own rules.
 const KEY_VARS = [
   "ANTHROPIC_" + "API_KEY",
@@ -22,7 +30,8 @@ const KEY_LITERAL = new RegExp(
 const LIVE_CONFIRM = /\bEXOS_LIVE_CONFIRM\s*[=:]\s*["']?(yes|true|1)\b/i;
 const LIVE_TARGET = /\b(live-claude|live-cursor|eval-live)\b/;
 const TRAILER = /Co-Authored-By|Claude-Session|Generated with \[?Claude Code/i;
-const IDENTITY_ENV = /\bGIT_(?:AUTHOR|COMMITTER)_[A-Z]+\s*=/;
+const IDENTITY_ENV =
+  /\bGIT_(?:AUTHOR|COMMITTER)_[A-Z]+\s*=|\bGIT_CONFIG_(?:COUNT|KEY_\d+|VALUE_\d+|PARAMETERS|GLOBAL|SYSTEM|NOSYSTEM)\s*=/;
 
 const KEY_ASSIGN_EXEMPT_DIRS = ["doctor/", "data/generator/", "harnesses/", "tests/"];
 const DEPLOY_FILE =
@@ -51,7 +60,7 @@ const block = (rule, message) => ({ rule, message });
 /** Split a shell command into rough segments at ; && || | and newlines. */
 function segments(command) {
   return command
-    .split(/&&|\|\||[;|\n]/)
+    .split(/&&|\|\||[;&|\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -67,6 +76,7 @@ function stripPrefix(segment) {
         "",
       )
       .replace(/^xargs\s+(?:(?:-[IiLlnPdaEesJ]\s*\S+|--\S+|-[0rtpx]+)\s+)*/, "")
+      .replace(/^(?:[({!]+|then\b|do\b|else\b|elif\b)\s*/, "")
       .replace(/^-u\s+\S+\s+/, "")
       .replace(/^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+/, "");
     // Also drop the directory of the command itself so /opt/homebrew/bin/claude matches `claude`.
@@ -152,6 +162,14 @@ function splitHeredocs(command) {
     if (c === "\\") {
       code += command.slice(i, i + 2);
       i += 2;
+      continue;
+    }
+    if (c === "#" && !top().double && (i === 0 || /[\s;&|(]/.test(command[i - 1]))) {
+      // An unquoted # at the start of a word is a comment up to the end of the line.
+      let end = command.indexOf("\n", i);
+      if (end === -1) end = command.length;
+      code += command.slice(i, end);
+      i = end;
       continue;
     }
     if (c === "'" && !top().double) {
@@ -267,6 +285,56 @@ function flagValues(seg, names) {
   return [...seg.matchAll(re)].map((m) => m[1]);
 }
 
+const SAFE_PUSH_FLAGS = new Set([
+  "-u",
+  "--set-upstream",
+  "--tags",
+  "--follow-tags",
+  "-n",
+  "--dry-run",
+  "-q",
+  "--quiet",
+  "-v",
+  "--verbose",
+  "--no-verify",
+  "--verify",
+  "--atomic",
+  "--progress",
+  "--porcelain",
+  "--no-signed",
+  "--thin",
+  "--no-thin",
+  "-4",
+  "-6",
+  "--ipv4",
+  "--ipv6",
+  "--no-recurse-submodules",
+]);
+
+/**
+ * Returns the first push argument that is not provably a plain push, or null. Git accepts
+ * unambiguous abbreviations of long options (--forc, --del), so an allowlist of known-safe flags is
+ * used instead of a list of dangerous ones. Refspecs starting with + (force) or : (delete) are unsafe.
+ */
+function unsafePushToken(tokens) {
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k];
+    if (/^[+:]/.test(t)) return t;
+    if (!t.startsWith("-")) continue;
+    if (SAFE_PUSH_FLAGS.has(t)) continue;
+    if (/^-[uqvn46]+$/.test(t)) continue;
+    if (/^--recurse-submodules=(?:check|on-demand|only|no)$/.test(t)) continue;
+    if (/^--signed=(?:true|false|if-asked)$/.test(t)) continue;
+    if (t === "-o" || t === "--push-option") {
+      k++;
+      continue;
+    }
+    if (t.startsWith("--push-option=")) continue;
+    return t;
+  }
+  return null;
+}
+
 const firstWord = (s) => (s.split(/\s+/)[0] ?? "").replace(/^.*\//, "");
 
 function bashRules(command, depth = 0) {
@@ -369,15 +437,20 @@ function bashRules(command, depth = 0) {
       ]);
       let at = 1;
       let uncertain = false;
+      let aliasRisk = false;
       while (at < tokens.length && tokens[at].startsWith("-")) {
         const t = tokens[at];
         if (takesArg.has(t)) {
-          if (t === "-c" && /^alias\./i.test(tokens[at + 1] ?? "")) uncertain = true;
+          if (t === "--config-env" || (t === "-c" && /^alias\./i.test(tokens[at + 1] ?? ""))) {
+            uncertain = true;
+            aliasRisk = true;
+          }
           at += 2;
-        } else if (
-          noArg.has(t) ||
-          /^--(?:git-dir|work-tree|namespace|config-env|exec-path)=/.test(t)
-        ) {
+        } else if (/^--config-env=/.test(t)) {
+          uncertain = true;
+          aliasRisk = true;
+          at += 1;
+        } else if (noArg.has(t) || /^--(?:git-dir|work-tree|namespace|exec-path)=/.test(t)) {
           at += 1;
         } else {
           uncertain = true;
@@ -389,21 +462,15 @@ function bashRules(command, depth = 0) {
       const pushTokens =
         sub === "push"
           ? tokens.slice(at + 1)
-          : uncertain && tokens.some((t) => /(?:^|=)push$/.test(t))
+          : uncertain && (aliasRisk || tokens.some((t) => /(?:^|=)push$/.test(t)))
             ? tokens
             : null;
       if (pushTokens) {
-        const destructive = pushTokens.some(
-          (t) =>
-            ["--force", "--force-with-lease", "--delete", "--mirror", "--prune"].includes(t) ||
-            t.startsWith("--force-with-lease=") ||
-            /^-[A-Za-z]*[fd][A-Za-z]*$/.test(t) ||
-            /^[+:]/.test(t),
-        );
-        if (destructive) {
+        const unsafe = unsafePushToken(pushTokens);
+        if (unsafe) {
           return block(
             "no-force-push",
-            "Force pushes, branch or tag deletions, mirror and prune pushes are forbidden. If a bad commit was pushed, list it under 'Needs the maintainer'.",
+            `Only plain pushes are allowed; "${unsafe}" can force, delete, mirror or prune (or is not a known-safe push flag). If a bad commit was pushed, list it under 'Needs the maintainer'.`,
           );
         }
       }
@@ -534,6 +601,48 @@ function bashRules(command, depth = 0) {
   return null;
 }
 
+/** Why a compose document breaks the loopback rail, or null. Edits arrive as fragments, so a regex backs up the parser. */
+function composeViolation(content) {
+  let doc;
+  if (parseYaml) {
+    try {
+      doc = parseYaml(content);
+    } catch {
+      doc = undefined;
+    }
+  }
+  if (doc && typeof doc === "object" && doc.services && typeof doc.services === "object") {
+    for (const [name, svc] of Object.entries(doc.services)) {
+      if (!svc || typeof svc !== "object") continue;
+      if (String(svc.network_mode ?? "") === "host")
+        return `service ${name} uses network_mode: host`;
+      for (const p of Array.isArray(svc.ports) ? svc.ports : []) {
+        if (typeof p === "string" || typeof p === "number") {
+          if (!/^(?:127\.0\.0\.1|\[::1\]):/.test(String(p))) {
+            return `service ${name} publishes ${p} without a 127.0.0.1: or [::1]: prefix`;
+          }
+        } else if (
+          p &&
+          typeof p === "object" &&
+          !["127.0.0.1", "::1"].includes(String(p.host_ip ?? ""))
+        ) {
+          return `service ${name} publishes a port without host_ip 127.0.0.1`;
+        }
+      }
+    }
+    return null;
+  }
+  for (const line of content.split("\n")) {
+    if (
+      /^\s*-\s*["']?(?!127\.0\.0\.1:|\[::1\]:)\d{2,5}(?:-\d{2,5})?(?::\d{2,5}|["']?\s*$)/.test(line)
+    ) {
+      return `compose port without a 127.0.0.1: prefix (${line.trim()})`;
+    }
+    if (/^\s*network_mode:\s*["']?host\b/.test(line)) return "network_mode: host";
+  }
+  return null;
+}
+
 function fileRules(rel, content, exists, isEdit) {
   if (!rel || rel.startsWith("../")) return null;
 
@@ -579,14 +688,8 @@ function fileRules(rel, content, exists, isEdit) {
     }
   }
   if (COMPOSE_FILE.test(rel)) {
-    for (const line of content.split("\n")) {
-      if (/^\s*-\s*["']?(?!127\.0\.0\.1:|\[::1\]:)\d{2,5}:\d{2,5}/.test(line)) {
-        return block(
-          "loopback-only",
-          `Compose port without 127.0.0.1: prefix (${line.trim()}) (rail 3).`,
-        );
-      }
-    }
+    const problem = composeViolation(content);
+    if (problem) return block("loopback-only", `${problem} (rail 3).`);
   }
   if (CONFIRM_FILE.test(rel) && LIVE_CONFIRM.test(content)) {
     return block(
