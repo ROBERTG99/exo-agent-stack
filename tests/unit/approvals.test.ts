@@ -73,10 +73,27 @@ describe("dashboard-only matching", () => {
     }
   });
 
+  it("matches a phrase as a word: `ssh` is not `-c gpg.ssh.program=false`, but still `/usr/bin/ssh host`", () => {
+    for (const c of ["ssh host", "/usr/bin/ssh host", "cd x && ssh host", "echo a; ssh -p 22 h"]) {
+      expect(bash(c), c).toBe(true);
+    }
+    for (const c of ["git -c gpg.ssh.program=false log", "echo a.ssh=b", "ls sshd"]) {
+      // a tool that is not Bash, so only the phrase matcher decides
+      expect(isDashboardOnly(parseDashboardOnly(["*(ssh)"]), "mcp.run", { command: c }), c).toBe(
+        false,
+      );
+    }
+    for (const c of ["ssh host", "run ssh -p 22 h", "/usr/bin/ssh h"]) {
+      expect(isDashboardOnly(parseDashboardOnly(["*(ssh)"]), "mcp.run", { command: c }), c).toBe(
+        true,
+      );
+    }
+  });
+
   it("lets plainly harmless commands through, and sends everything it cannot vouch for to the dashboard", () => {
     for (const c of [
       "ls -la",
-      "git --no-pager -c log.showSignature=false log --no-ext-diff --no-textconv --oneline",
+      "git --no-pager -c core.fsmonitor=false -c gpg.program=false -c gpg.x509.program=false -c gpg.ssh.program=false log --no-ext-diff --no-textconv --oneline",
       "cat README.md",
     ]) {
       expect(bash(c), c).toBe(false);

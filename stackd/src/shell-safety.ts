@@ -420,13 +420,31 @@ function findIsSafe(args: string[], globs: boolean[]): boolean {
   return true;
 }
 
-// git runs programs named in the repository's own config (signature checking through `gpg.program`,
-// clean and textconv filters, `diff.external`, the file system monitor), and an agent may have written
-// that file. So only commands that read objects and refs are vouched for (`status` and `diff` of the
-// work tree run clean filters and the monitor; `blame`, `shortlog`, `describe` and `ls-files` are left
-// to the dashboard), and each has to switch the rest off itself: `--no-pager` and `-c
-// log.showSignature=false` before the subcommand, and `--no-ext-diff --no-textconv` for `log` and
-// `show`. A `-c` on the command line outranks every config file.
+// git runs programs named in the repository's own config (signature checking through `gpg.program`
+// and its x509 and ssh variants, which any `%G` format or `log.showSignature` reaches; clean and
+// textconv filters; `diff.external`; the file system monitor), and an agent may have written that
+// file. So only commands that read objects and refs are vouched for (`status` and `diff` of the work
+// tree run clean filters and the monitor; `blame`, `shortlog`, `describe` and `ls-files` are left to
+// the dashboard), and each has to switch the rest off itself, before the subcommand: `--no-pager`,
+// `-c core.fsmonitor=false` and the three gpg programs set to `false`; `log` and `show` also take
+// `--no-ext-diff --no-textconv`. A `-c` on the command line outranks every config file. A format may
+// only be a built-in name, because a name the repository defines can stand for `format:%GG`.
+const GIT_PINS = new Set([
+  "core.fsmonitor=false",
+  "gpg.program=false",
+  "gpg.x509.program=false",
+  "gpg.ssh.program=false",
+]);
+const GIT_BUILTIN_FORMATS = new Set([
+  "oneline",
+  "short",
+  "medium",
+  "full",
+  "fuller",
+  "reference",
+  "email",
+  "raw",
+]);
 const GIT_READ_ONLY = new Set(["log", "show", "rev-parse"]);
 const GIT_DIFFS = new Set(["log", "show"]);
 /** Options that write a file, run a program or point git somewhere else (long ones, whole). */
@@ -448,17 +466,18 @@ const GIT_FORBIDDEN_LONG = [
 function gitIsSafe(args: string[], globs: boolean[]): boolean {
   let k = 0;
   let noPager = false;
-  let signatureOff = false;
+  const pinned = new Set<string>();
   for (;;) {
     if (args[k] === "--no-pager") {
       noPager = true;
       k += 1;
-    } else if (args[k] === "-c" && args[k + 1] === "log.showSignature=false") {
-      signatureOff = true;
+    } else if (args[k] === "-c" && GIT_PINS.has(args[k + 1] ?? "")) {
+      pinned.add(args[k + 1]!);
       k += 2;
     } else break;
   }
-  if (!noPager || !signatureOff || globs.slice(0, k + 1).some(Boolean)) return false;
+  if (!noPager || pinned.size !== GIT_PINS.size || globs.slice(0, k + 1).some(Boolean))
+    return false;
   const sub = args[k++];
   if (sub === undefined || !GIT_READ_ONLY.has(sub)) return false;
   const needed = new Set(GIT_DIFFS.has(sub) ? ["--no-ext-diff", "--no-textconv"] : []);
@@ -474,6 +493,10 @@ function gitIsSafe(args: string[], globs: boolean[]): boolean {
       needed.delete(a);
       // git accepts any unambiguous abbreviation of a long option (`--ext` for `--ext-diff`)
       const name = a.split("=")[0]!;
+      const isFormat =
+        name.length >= 3 && ("--pretty".startsWith(name) || "--format".startsWith(name));
+      if (isFormat && a.includes("=") && !GIT_BUILTIN_FORMATS.has(a.slice(name.length + 1)))
+        return false;
       if (
         /^-O/.test(a) ||
         (name.startsWith("--") && GIT_FORBIDDEN_LONG.some((f) => f.startsWith(name))) ||

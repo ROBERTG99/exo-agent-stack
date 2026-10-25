@@ -88,6 +88,15 @@ interface Matcher {
 const glob = (g: string): string => g.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
 
 /**
+ * A phrase matches as a word where it begins or ends with a word character: `ssh` is `ssh host` and
+ * `/usr/bin/ssh host` but not the key in `-c gpg.ssh.program=false`.
+ */
+const phrase = (p: string): RegExp =>
+  new RegExp(
+    `${/^\w/.test(p) ? "(?<![\\w.=-])" : ""}${glob(p)}${/\w$/.test(p) ? "(?![\\w.=-])" : ""}`,
+  );
+
+/**
  * `tool` or `tool(phrase)`. The tool name is a whole-name glob; the phrase is searched anywhere in
  * the call's command, URL or path, so `claude.Bash(git push)` also catches `cd x && git push -f`
  * (and, deliberately, `echo "git push"`: a false positive only sends it to the dashboard).
@@ -101,7 +110,7 @@ export function parseDashboardOnly(patterns: string[]): Matcher[] {
       if (!m) throw new Error(`EXOS_APPROVE_DASHBOARD_ONLY: cannot read "${p}"`);
       return {
         tool: new RegExp(`^${glob(m[1]!.trim())}$`),
-        ...(m[2] ? { args: new RegExp(glob(m[2].trim())) } : {}),
+        ...(m[2] ? { args: phrase(m[2].trim()) } : {}),
       };
     });
 }
