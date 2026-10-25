@@ -20,8 +20,8 @@ interface Segment {
 }
 
 const BIN_DIRS = new Set(["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]);
-const SAFE_REDIRECT_TARGET = (t: string): boolean =>
-  t === "/dev/null" || (isLocalPath(t) && !t.startsWith("-"));
+/** Nothing may be written to a file: a later command could run it. Only the bit bucket is allowed. */
+const SAFE_REDIRECT_TARGET = (t: string): boolean => t === "/dev/null";
 
 /** A relative path that stays inside the working directory and uses no expansion. */
 function isLocalPath(p: string): boolean {
@@ -171,69 +171,277 @@ function parse(command: string): Segment[] | null {
 class Fail extends Error {}
 
 // --- what each program may do --------------------------------------------------------------------
+//
+// Only read-only inspection is vouched for: nothing that writes a file (a later command might run
+// it), runs code from the repository, or reaches the network. Flags come from a short list per
+// program; a flag that is not listed makes the command unsafe. Paths must be relative and stay in
+// the working directory, so a bridge-approved `cat` cannot print a token file. (A symlink inside the
+// worktree that points elsewhere is not visible to a string check; the deny rules and the path
+// guard remain the defence there.)
 
-/** Programs that read or print and cannot run other code or reach the network. */
-const PLAIN = new Set([
-  "ls",
-  "cat",
-  "head",
-  "tail",
-  "wc",
-  "pwd",
-  "echo",
-  "printf",
-  "true",
-  "false",
-  "grep",
-  "egrep",
-  "fgrep",
-  "diff",
-  "cut",
-  "tr",
-  "basename",
-  "dirname",
-  "realpath",
-  "which",
-  "date",
-]);
-/** Programs that write: their path arguments must stay inside the working directory. */
-const WRITERS = new Set(["mkdir", "touch", "cp", "mv"]);
+type ValueKind = "num" | "text" | "glob";
 
-const GIT_LOCAL = new Set([
+interface Spec {
+  /** Letters usable alone or bundled (`-rn`). */
+  short?: string;
+  /** Letters that take a value, attached (`-n5`) or as the next word; last in a bundle. */
+  valueShort?: Record<string, ValueKind>;
+  long?: string[];
+  valueLong?: Record<string, ValueKind>;
+  /** How many leading positional words are free text (a pattern) rather than paths. */
+  text?: (seen: Set<string>) => number;
+  /** At most this many positional words. */
+  max?: number;
+  /** Positional words are paths and must stay local (default true). */
+  paths?: boolean;
+}
+
+const DIGITS = "0123456789";
+
+function valueOk(kind: ValueKind, v: string): boolean {
+  if (kind === "num") return /^\d{1,9}$/.test(v);
+  if (kind === "glob")
+    return /^[A-Za-z0-9_.*?/[\]{},+-]{1,200}$/.test(v) && isLocalPath(v.replace(/^\*+\/?/, "x"));
+  return v.length <= 500 && ![...v].some((c) => c.charCodeAt(0) < 32 && c !== "\t");
+}
+
+/** Checks `args` against a spec; returns the positional words, or null if anything is off. */
+function check(spec: Spec, args: string[]): string[] | null {
+  const seen = new Set<string>();
+  const positional: string[] = [];
+  let i = 0;
+  let endOfOptions = false;
+  while (i < args.length) {
+    const a = args[i++]!;
+    if (!endOfOptions && a === "--") {
+      endOfOptions = true;
+      continue;
+    }
+    if (!endOfOptions && a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      const name = eq < 0 ? a : a.slice(0, eq);
+      if (eq < 0 && spec.long?.includes(name)) {
+        seen.add(name);
+        continue;
+      }
+      const kind = spec.valueLong?.[name];
+      if (!kind) return null;
+      const value = eq < 0 ? args[i++] : a.slice(eq + 1);
+      if (value === undefined || !valueOk(kind, value)) return null;
+      seen.add(name);
+      continue;
+    }
+    if (!endOfOptions && a.startsWith("-") && a.length > 1) {
+      for (let j = 1; j < a.length; j++) {
+        const c = a[j]!;
+        if (spec.short?.includes(c)) {
+          seen.add(c);
+          continue;
+        }
+        const kind = spec.valueShort?.[c];
+        if (!kind) return null;
+        const attached = a.slice(j + 1);
+        const value = attached !== "" ? attached : args[i++];
+        if (value === undefined || !valueOk(kind, value)) return null;
+        seen.add(c);
+        break;
+      }
+      continue;
+    }
+    positional.push(a);
+  }
+  if (spec.max !== undefined && positional.length > spec.max) return null;
+  const free = spec.text?.(seen) ?? 0;
+  if (positional.length < free) return null;
+  const pathWords = positional.slice(free);
+  if ((spec.paths ?? true) && !pathWords.every(isLocalPath)) return null;
+  return positional;
+}
+
+const NONE: Spec = { max: 0 };
+
+const SPECS: Record<string, Spec> = {
+  ls: { short: "lahAR1tSrdFpGs" },
+  cat: { short: "nbsAETv" },
+  head: {
+    short: DIGITS,
+    valueShort: { n: "num", c: "num" },
+    valueLong: { "--lines": "num", "--bytes": "num" },
+  },
+  tail: {
+    short: DIGITS,
+    valueShort: { n: "num", c: "num" },
+    valueLong: { "--lines": "num", "--bytes": "num" },
+  },
+  wc: { short: "lwcmL" },
+  pwd: NONE,
+  true: NONE,
+  false: NONE,
+  realpath: { max: 4 },
+  grep: grepSpec(),
+  egrep: grepSpec(),
+  fgrep: grepSpec(),
+  rg: {
+    short: "nivclLwFsSoI",
+    valueShort: { e: "text", g: "glob", t: "text", m: "num", A: "num", B: "num", C: "num" },
+    long: [
+      "--line-number",
+      "--ignore-case",
+      "--invert-match",
+      "--count",
+      "--files-with-matches",
+      "--word-regexp",
+      "--fixed-strings",
+      "--only-matching",
+      "--hidden",
+    ],
+    valueLong: { "--glob": "glob", "--type": "text", "--max-count": "num", "--regexp": "text" },
+    text: (seen) => (seen.has("e") || seen.has("--regexp") ? 0 : 1),
+  },
+  diff: {
+    short: "uqrNiwBb",
+    valueShort: { U: "num" },
+    long: ["--unified", "--brief", "--recursive", "--ignore-case", "--ignore-all-space"],
+    max: 2,
+  },
+  sort: {
+    short: "nrufbdhmMVsc",
+    valueShort: { k: "text", t: "text" },
+    long: [
+      "--numeric-sort",
+      "--reverse",
+      "--unique",
+      "--ignore-case",
+      "--version-sort",
+      "--human-numeric-sort",
+      "--stable",
+      "--ignore-leading-blanks",
+      "--dictionary-order",
+      "--month-sort",
+    ],
+    valueLong: { "--key": "text", "--field-separator": "text" },
+  },
+  uniq: { short: "cdui", valueShort: { f: "num", s: "num", w: "num" }, max: 1 },
+  cut: { short: "s", valueShort: { d: "text", f: "text", c: "text", b: "text" } },
+  tr: { short: "dsc", paths: false, text: () => 0 },
+  basename: { paths: false, max: 2 },
+  dirname: { paths: false, max: 1 },
+  which: { paths: false, max: 4 },
+};
+
+function grepSpec(): Spec {
+  return {
+    short: "rnivclLwxFEhHsqIaoz",
+    valueShort: { e: "text", m: "num", A: "num", B: "num", C: "num" },
+    long: [
+      "--recursive",
+      "--line-number",
+      "--ignore-case",
+      "--invert-match",
+      "--count",
+      "--files-with-matches",
+      "--word-regexp",
+      "--no-filename",
+      "--with-filename",
+      "--only-matching",
+      "--quiet",
+    ],
+    valueLong: {
+      "--include": "glob",
+      "--exclude": "glob",
+      "--exclude-dir": "glob",
+      "--max-count": "num",
+      "--context": "num",
+      "--regexp": "text",
+    },
+    text: (seen) => (seen.has("e") || seen.has("--regexp") ? 0 : 1),
+  };
+}
+
+/** `find`: start points, then a short list of read-only tests. */
+function findIsSafe(args: string[]): boolean {
+  let i = 0;
+  while (i < args.length && !args[i]!.startsWith("-") && args[i] !== "!") {
+    if (!isLocalPath(args[i]!)) return false;
+    i++;
+  }
+  const withValue: Record<string, ValueKind> = {
+    "-name": "glob",
+    "-iname": "glob",
+    "-path": "glob",
+    "-ipath": "glob",
+    "-type": "text",
+    "-maxdepth": "num",
+    "-mindepth": "num",
+    "-size": "text",
+    "-mtime": "text",
+    "-perm": "text",
+  };
+  const bare = new Set([
+    "-print",
+    "-print0",
+    "-empty",
+    "-not",
+    "!",
+    "-a",
+    "-o",
+    "-and",
+    "-or",
+    "-readable",
+    "-writable",
+  ]);
+  for (; i < args.length; i++) {
+    const a = args[i]!;
+    if (bare.has(a)) continue;
+    const kind = withValue[a];
+    if (!kind) return false;
+    const v = args[++i];
+    if (v === undefined) return false;
+    if (kind === "text" ? !/^[A-Za-z0-9+_.,-]{1,40}$/.test(v) : !valueOk(kind, v)) return false;
+  }
+  return true;
+}
+
+const GIT_READ_ONLY = new Set([
   "status",
   "diff",
   "log",
   "show",
-  "add",
-  "commit",
-  "branch",
-  "checkout",
-  "switch",
-  "restore",
-  "stash",
   "rev-parse",
   "ls-files",
   "blame",
-  "merge-base",
-  "describe",
   "shortlog",
-  "reset",
-  "tag",
+  "describe",
 ]);
-const MAKE_TARGETS = new Set(["check-fast", "lint", "typecheck", "test", "test-unit"]);
-const NODE_SCRIPTS = new Set(["test", "lint", "typecheck", "build"]);
-const EXEC_PROGRAMS = new Set(["vitest", "tsc", "eslint", "prettier"]);
-const FIND_UNSAFE = new Set([
-  "-exec",
-  "-execdir",
-  "-ok",
-  "-okdir",
-  "-delete",
-  "-fprint",
-  "-fprint0",
-  "-fprintf",
-  "-fls",
-]);
+/** Options that write a file, run a program or point git somewhere else. */
+const GIT_FORBIDDEN =
+  /^(--output|--ext-diff|--textconv|--open-files-in-pager|--no-index|--git-dir|--work-tree|--exec-path|--upload-pack|--receive-pack|--contents|-O)/;
+
+function gitIsSafe(args: string[]): boolean {
+  let k = 0;
+  while (args[k] === "--no-pager") k++;
+  const sub = args[k++];
+  if (sub === undefined || !GIT_READ_ONLY.has(sub)) return false;
+  let endOfOptions = false;
+  for (; k < args.length; k++) {
+    const a = args[k]!;
+    if (!endOfOptions && a === "--") {
+      endOfOptions = true;
+      continue;
+    }
+    if (!endOfOptions && a.startsWith("-")) {
+      if (
+        GIT_FORBIDDEN.test(a) ||
+        !/^-{1,2}[A-Za-z0-9][A-Za-z0-9-]*(=[A-Za-z0-9_.,:/@~^-]*)?$/.test(a)
+      )
+        return false;
+      continue;
+    }
+    // a revision or a path: no leading slash or tilde, no ".." path segment, no expansion
+    if (!isLocalPath(a)) return false;
+  }
+  return true;
+}
 
 function programOf(word: Word): string | null {
   if (word.decorated) return null;
@@ -249,44 +457,25 @@ function segmentIsSafe(segment: Segment): boolean {
   if (!program) return false;
   const args = rest.map((w) => w.text);
 
-  if (PLAIN.has(program)) return true;
-  if (WRITERS.has(program)) return args.filter((a) => !a.startsWith("-")).every(isLocalPath);
   switch (program) {
-    case "sort":
-      // -o and --output write a file anywhere
+    case "echo":
+      return true;
+    case "printf":
+      return args[0] !== "-v";
+    case "date":
       return (
-        !args.some((a) => a === "-o" || a.startsWith("-o") || a.startsWith("--output")) &&
-        args.filter((a) => !a.startsWith("-")).every(isLocalPath)
-      );
-    case "uniq":
-      // a second file argument is an output file
-      return (
-        args.filter((a) => !a.startsWith("-")).length <= 1 &&
-        args.filter((a) => !a.startsWith("-")).every(isLocalPath)
+        args.length === 0 || (args.length === 1 && /^\+[A-Za-z0-9%:_ .-]{1,60}$/.test(args[0]!))
       );
     case "cd":
       return args.length === 1 && isLocalPath(args[0]!);
     case "find":
-      return !args.some((a) => FIND_UNSAFE.has(a));
-    case "rg":
-      return !args.some(
-        (a) => a === "--pre" || a.startsWith("--pre=") || a.startsWith("--hostname-bin"),
-      );
-    case "git": {
-      let k = 0;
-      while (args[k] === "--no-pager") k++;
-      return args[k] !== undefined && GIT_LOCAL.has(args[k]!);
+      return findIsSafe(args);
+    case "git":
+      return gitIsSafe(args);
+    default: {
+      const spec = Object.hasOwn(SPECS, program) ? SPECS[program] : undefined;
+      return spec !== undefined && check(spec, args) !== null;
     }
-    case "make":
-      return args.length > 0 && args.every((a) => MAKE_TARGETS.has(a));
-    case "pnpm":
-    case "npm": {
-      if (args[0] === "exec" && program === "pnpm") return EXEC_PROGRAMS.has(args[1] ?? "");
-      const script = args[0] === "run" ? args[1] : args[0];
-      return script !== undefined && NODE_SCRIPTS.has(script);
-    }
-    default:
-      return false;
   }
 }
 

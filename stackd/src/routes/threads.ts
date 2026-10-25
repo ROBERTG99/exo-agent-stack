@@ -5,7 +5,7 @@ import { sha256Hex } from "@exos/common";
 import { askUserDeclaration } from "@exos/tools/ask-user";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { poolOf } from "../agents.ts";
+import { poolOf, type AgentInfo } from "../agents.ts";
 import { bannerFor } from "../credit.ts";
 import type { AppContext } from "../context.ts";
 import { ApiError } from "../errors.ts";
@@ -82,24 +82,37 @@ async function adoptActiveTurn(
 /** Submits a turn, adopting the one already running if this is a retry of a half-done request. */
 async function submitTurn(
   ctx: AppContext,
-  agentId: string,
-  threadId: string,
+  agent: AgentInfo,
+  thread: { id: string; slug: string },
   input: string,
   adopt: boolean,
 ): Promise<{ turn_id: string; session_id: string }> {
+  await ctx.supervisor.assertCapacity();
+  const tracked = {
+    agentId: agent.id,
+    threadId: thread.id,
+    threadSlug: thread.slug,
+    pool: poolOf(agent),
+  };
   try {
-    const res = await ctx.exo.submitTurn(agentId, threadId, {
+    const res = await ctx.exo.submitTurn(agent.id, thread.id, {
       input,
       frontend_tools: frontendTools(),
     });
     const turn = res.turn as string | { id: string; session_id?: string };
-    return typeof turn === "string"
-      ? { turn_id: turn, session_id: "" }
-      : { turn_id: turn.id, session_id: turn.session_id ?? "" };
+    const out =
+      typeof turn === "string"
+        ? { turn_id: turn, session_id: "" }
+        : { turn_id: turn.id, session_id: turn.session_id ?? "" };
+    ctx.supervisor.track(out.turn_id, tracked);
+    return out;
   } catch (err) {
     if (adopt && err instanceof ExoHttpError && err.status === 409) {
-      const adopted = await adoptActiveTurn(ctx.exo, agentId, threadId);
-      if (adopted) return adopted;
+      const adopted = await adoptActiveTurn(ctx.exo, agent.id, thread.id);
+      if (adopted) {
+        ctx.supervisor.track(adopted.turn_id, tracked);
+        return adopted;
+      }
     }
     throw err;
   }
@@ -168,7 +181,7 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
         let turnId = progress.turn_id as string | undefined;
         let sessionId = progress.session_id as string | undefined;
         if (!turnId) {
-          const turn = await submitTurn(ctx, agent.id, threadId, body.prompt, true);
+          const turn = await submitTurn(ctx, agent, { id: threadId, slug }, body.prompt, true);
           turnId = turn.turn_id;
           sessionId = turn.session_id;
           save({ turn_id: turnId, session_id: sessionId });
@@ -267,7 +280,7 @@ export function registerThreadRoutes(app: FastifyInstance, ctx: AppContext, auth
         let turnId = progress.turn_id as string | undefined;
         let sessionId = progress.session_id as string | undefined;
         if (!turnId) {
-          const turn = await submitTurn(ctx, agent.id, thread.id, body.message, false);
+          const turn = await submitTurn(ctx, agent, thread, body.message, false);
           turnId = turn.turn_id;
           sessionId = turn.session_id;
           save({ turn_id: turnId, session_id: sessionId });

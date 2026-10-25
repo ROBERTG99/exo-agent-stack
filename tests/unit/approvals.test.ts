@@ -74,10 +74,14 @@ describe("dashboard-only matching", () => {
   });
 
   it("lets plainly harmless commands through, and sends everything it cannot vouch for to the dashboard", () => {
-    for (const c of ["ls -la", "git status", "git commit -m x", "pnpm test", "make check-fast"]) {
+    for (const c of ["ls -la", "git status", "git diff --stat", "cat README.md"]) {
       expect(bash(c), c).toBe(false);
     }
     for (const c of [
+      "git commit -m x",
+      "pnpm test",
+      "make check-fast",
+      "echo x > Makefile",
       "npm install",
       "git -c core.sshCommand=x push",
       "/usr/bin/git  push",

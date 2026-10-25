@@ -133,3 +133,9 @@ None of V-1 to V-16 could be verified because the pinned source was not availabl
 
 - **What:** the 402 check before any Exo request needs the agent's pool, which stackd knows from the catalogue it last read. Right after a start, before any read, the first start request does one catalogue lookup in Exo before the credit check. `EXOS_CREDIT_CANCEL_ACTIVE` is parsed and reported by `/api/v1/credit` but nothing cancels active turns yet (T-28).
 - **Closes when:** the supervisor (T-28) cancels active turns on a transition to `stop` and warms the directory at start-up.
+
+## Shell approvals: string checks cannot see symlinks, and the dashboard token shares the state directory
+
+- **What:** the read-only check for bridge-approvable `claude.Bash` commands (stackd/src/shell-safety.ts) works on the command text. A symlink in a worktree that points to a secret would let an approved `cat link` read it. The dashboard token lives in `<state dir>/dashboard-token`, the same directory as the worktrees, protected by the deny rules and by the check refusing `..`.
+- **Mitigation today:** a person approves every command that is not plainly read-only; Mode A's deny list and path guard stop reads of the state directory; Mode B has no host filesystem.
+- **Closes when:** the dashboard token moves out of the state directory (for example into a per-user config directory the harnesses never mount), and doctor D-17 verifies it.

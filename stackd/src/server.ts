@@ -17,6 +17,7 @@ import { appendAudit, defaultMigrationsDir, migrate, openDatabase, type Db } fro
 import { toProblem } from "./errors.ts";
 import { Idempotency } from "./idempotency.ts";
 import { Meter } from "./meter.ts";
+import { Supervisor, type SupervisorConfig } from "./supervisor.ts";
 import { loadRates } from "./pricing.ts";
 import { problem } from "./problem.ts";
 import { registerApprovalRoutes } from "./routes/approvals.ts";
@@ -41,6 +42,10 @@ export interface StackdOptions {
   /** Pass the meter runs at, in seconds; 0 (the default) leaves it to the caller (tests, `main`). */
   meterIntervalSeconds?: number;
   ratesFile?: string;
+  /** Limits and timings of the supervisor (EXOS_MAX_ACTIVE_TURNS, EXOS_RECOVERY_MAX_ATTEMPTS). */
+  supervisor?: Partial<SupervisorConfig>;
+  /** Milliseconds between supervisor passes; 0 (the default) leaves ticking to the caller. */
+  supervisorIntervalMs?: number;
   /** Tool patterns only a person in the dashboard may approve (EXOS_APPROVE_DASHBOARD_ONLY). */
   dashboardOnlyTools?: string[];
   clock?: () => Date;
@@ -78,6 +83,7 @@ export interface Stackd {
   meter: Meter;
   credit: CreditGuard;
   approvals: ApprovalQueue;
+  supervisor: Supervisor;
   ctx: AppContext;
   /** Closes the HTTP server and the database. */
   close(): Promise<void>;
@@ -97,10 +103,13 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     appendAudit(db, { actor, action, target, details }, clock);
   };
   const creditConfig = opts.credit ?? DEFAULT_CREDIT_CONFIG;
+  // the credit guard is built before the supervisor it notifies
+  const link: { supervisor?: Supervisor } = {};
   const credit = new CreditGuard({
     db,
     config: creditConfig,
     clock,
+    onTransition: (t) => void link.supervisor?.onCredit(t),
     audit: (action, target, details) =>
       void appendAudit(db, { actor: "system", action, target, details }, clock),
   });
@@ -119,6 +128,26 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     },
   });
   if ((opts.meterIntervalSeconds ?? 0) > 0) meter.start(opts.meterIntervalSeconds!);
+  const approvals = new ApprovalQueue({
+    db,
+    exo,
+    agents,
+    dashboardOnly: opts.dashboardOnlyTools ?? loadDashboardOnly({}),
+    clock,
+  });
+  const supervisor = new Supervisor({
+    db,
+    exo,
+    agents,
+    credit,
+    approvals,
+    config: opts.supervisor,
+    clock,
+    audit: (action, target, details) =>
+      void appendAudit(db, { actor: "system", action, target, details }, clock),
+  });
+  link.supervisor = supervisor;
+  if ((opts.supervisorIntervalMs ?? 0) > 0) supervisor.start(opts.supervisorIntervalMs!);
   const ctx: AppContext = {
     db,
     exo,
@@ -130,6 +159,7 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     credit,
     meter,
     agents,
+    supervisor,
     clock,
     dashboardUrl: `http://127.0.0.1:${dashboardPort}`,
     audit,
@@ -215,7 +245,12 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
       () => true,
       () => false,
     );
-    return { status: reachable ? "ok" : "degraded", service: "stackd", exo: { reachable } };
+    return {
+      status: reachable ? "ok" : "degraded",
+      service: "stackd",
+      exo: { reachable },
+      supervisor: supervisor.status(),
+    };
   });
 
   app.get("/api/v1/agents", { preHandler: requireToken }, async () => ({
@@ -226,17 +261,11 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
 
   registerThreadRoutes(app, ctx, requireToken);
   registerEventRoutes(app, ctx, requireToken);
-  const approvals = new ApprovalQueue({
-    db,
-    exo,
-    agents,
-    dashboardOnly: opts.dashboardOnlyTools ?? loadDashboardOnly({}),
-    clock,
-  });
   registerApprovalRoutes(app, ctx, approvals, requireToken);
 
   app.addHook("onClose", async () => {
     meter.stop();
+    supervisor.stop();
     db.close();
   });
   return {
@@ -247,6 +276,7 @@ export async function buildStackd(opts: StackdOptions): Promise<Stackd> {
     meter,
     credit,
     approvals,
+    supervisor,
     ctx,
     close: () => app.close(),
   };
@@ -263,6 +293,11 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<Fastif
     dashboardPort: parsePort(env.EXOS_DASHBOARD_PORT, 9800),
     credit: loadCreditConfig(env),
     dashboardOnlyTools: loadDashboardOnly(env),
+    supervisor: {
+      maxActiveTurns: Number(env.EXOS_MAX_ACTIVE_TURNS || 4),
+      recoveryMaxAttempts: Number(env.EXOS_RECOVERY_MAX_ATTEMPTS || 3),
+    },
+    supervisorIntervalMs: 1000,
     meterIntervalSeconds: Number(env.EXOS_METER_INTERVAL_SECONDS || 15),
     allowedWorkspaceRoots: (env.EXOS_ALLOWED_WORKSPACE_ROOTS ?? "")
       .split(path.delimiter)

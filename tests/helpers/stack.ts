@@ -62,15 +62,21 @@ export async function startStack(opts: StackOptions = {}) {
   }
 
   const exoDataDir = opts.exoDataDir ?? dir("exo-sim-");
-  const sim: ExoSim = await createExoSim({
-    dataDir: exoDataDir,
-    modelUrl,
-    stepDelayMs: opts.stepDelayMs,
-    ledgerPath: opts.ledgerPath,
-    pollMs: 10,
-  });
-  await sim.app.listen({ host: "127.0.0.1", port: 0 });
-  const exoUrl = `http://127.0.0.1:${(sim.app.server.address() as AddressInfo).port}/exo`;
+  const bootSim = async (port: number, onRestart?: "resume" | "interrupt") => {
+    const made = await createExoSim({
+      dataDir: exoDataDir,
+      modelUrl: modelUrl!,
+      stepDelayMs: opts.stepDelayMs,
+      ledgerPath: opts.ledgerPath,
+      pollMs: 10,
+      onRestart,
+    });
+    await made.app.listen({ host: "127.0.0.1", port });
+    return made;
+  };
+  let sim: ExoSim = await bootSim(0);
+  const exoPort = (sim.app.server.address() as AddressInfo).port;
+  const exoUrl = `http://127.0.0.1:${exoPort}/exo`;
   let simClosed = false;
   const closeSim = async () => {
     if (simClosed) return;
@@ -78,6 +84,14 @@ export async function startStack(opts: StackOptions = {}) {
     await sim.close();
   };
   cleanups.push(closeSim);
+  /** Kills Exo as a SIGKILL would (nothing is written) and brings it back on the same port. */
+  const restartExo = async (onRestart: "resume" | "interrupt" = "interrupt") => {
+    sim.crash();
+    await sim.abandon();
+    sim = await bootSim(exoPort, onRestart);
+    simClosed = false;
+    return sim;
+  };
 
   const exo = new ExoClient({ baseUrl: exoUrl, retries: 0 });
   const existing = new Set((await exo.listAgents()).map((a) => a.slug));
@@ -133,7 +147,10 @@ export async function startStack(opts: StackOptions = {}) {
     stateDir,
     token: stackd.token,
     stackd,
-    sim,
+    get sim() {
+      return sim;
+    },
+    restartExo,
     exo,
     call,
     /** Stops Exo (the simulator) while stackd keeps running, to test "Exo down". */

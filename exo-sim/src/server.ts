@@ -15,6 +15,12 @@ export interface ExoSimOptions {
   stepDelayMs?: number;
   ledgerPath?: string;
   pollMs?: number;
+  /**
+   * What a restart does with turns that were running: resume them (the default, like a harness
+   * that exports `resumeTurn`) or leave them interrupted, with no `turn_ended`, like a Claude Code
+   * turn whose process died. The supervisor is what continues the latter.
+   */
+  onRestart?: "resume" | "interrupt";
 }
 
 export interface ExoSim {
@@ -406,7 +412,11 @@ export async function createExoSim(opts: ExoSimOptions): Promise<ExoSim> {
     },
   );
 
-  runner.recover();
+  if (opts.onRestart === "interrupt") {
+    for (const turn of store.runningTurns()) store.setTurnStatus(turn.id, "interrupted");
+  } else {
+    runner.recover();
+  }
 
   return {
     app,

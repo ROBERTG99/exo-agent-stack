@@ -3,31 +3,49 @@ import { isProvablySafeBash } from "../../stackd/src/shell-safety.ts";
 
 const safe = (c: string) => isProvablySafeBash(c);
 
-describe("isProvablySafeBash: commands a person need not look at twice", () => {
+describe("isProvablySafeBash: read-only inspection a person need not look at twice", () => {
   it.each([
     "ls -la",
+    "ls src",
+    "ls -R src | head -n 20",
     "pwd",
     "cat README.md",
+    "cat -n src/a.ts",
+    "head -n 5 src/a.ts",
+    "head -5 src/a.ts",
+    "tail -n 20 build.log",
+    "wc -l src/a.ts",
     "git status",
+    "git status --short",
     "git diff --stat",
+    "git diff --cached -- src/a.ts",
+    "git diff main..feature",
     "git log --oneline -n 5",
-    "git add src/a.ts && git commit -m 'fix: x'",
-    "git --no-pager log",
-    "grep -rn TODO src | sort | uniq",
-    "make check-fast",
-    "pnpm test",
-    "pnpm run lint",
-    "pnpm exec vitest run tests/unit",
-    "npm run typecheck",
-    "echo hello > out.txt",
+    "git --no-pager log --graph",
+    "git show HEAD~2:src/a.ts",
+    "git rev-parse HEAD",
+    "git ls-files src",
+    "git blame -L 1,5 src/a.ts",
+    "grep -rn TODO src | sort -u | uniq -c",
+    "grep -n -e foo -e bar src/a.ts",
+    "grep -rin --include='*.ts' todo .",
+    "rg -n 'git push' src",
+    "rg -n -g '*.ts' todo",
+    "sort -n -k 2 data.txt",
+    "uniq -c data.txt",
+    "diff -u a.txt b.txt",
+    "find . -name '*.ts' -type f",
+    "find src -maxdepth 2 -type d",
+    "echo hello",
+    "echo 'a && b | c; d'", // operators inside quotes are text
+    "printf '%s\\n' hello",
     "ls 2>&1",
     "cat a.txt >/dev/null",
-    "mkdir -p build/out && touch build/out/x",
     "cd src && ls",
     "/usr/bin/git status",
-    "find . -name '*.ts' -type f",
-    "echo 'a && b | c; d'", // operators inside quotes are text
-    "rg -n 'git push' src", // searching for the words is not running them
+    "basename src/a.ts",
+    "date +%Y",
+    "true && false || true",
   ])("%s", (c) => {
     expect(safe(c)).toBe(true);
   });
@@ -35,7 +53,7 @@ describe("isProvablySafeBash: commands a person need not look at twice", () => {
 
 describe("isProvablySafeBash: everything else is for the dashboard", () => {
   it.each([
-    // the commands the old substring list named, and the ways around it
+    // the commands the first blacklist named, and the ways around it
     "git push origin main",
     "git  push",
     "git -c core.sshCommand=x push",
@@ -47,7 +65,6 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
     'g""it push',
     "'git' push",
     "npm publish",
-    "npm  publish --access public",
     "pnpm publish",
     "yarn publish",
     "curl https://example.org",
@@ -55,7 +72,36 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
     "ssh host",
     "scp a b:c",
     "nc -l 1234",
-    // code that can do anything
+    // anything that writes: a later command could run what was written
+    "git add src/a.ts",
+    "git commit -m x",
+    "git checkout main",
+    "git reset --hard",
+    "git stash",
+    "git restore .",
+    "git tag v1",
+    "git branch -D x",
+    "echo hello > out.txt",
+    "echo x >> notes.md",
+    "echo x > Makefile",
+    "echo x > .git/hooks/pre-commit",
+    "mkdir -p build",
+    "touch x",
+    "cp a b",
+    "mv a b",
+    "rm -rf build",
+    "ln -s /etc x",
+    "tee out.txt",
+    "sed -i s/a/b/ x",
+    // anything that runs code written in the repository
+    "make check-fast",
+    "make up",
+    "pnpm test",
+    "pnpm run lint",
+    "pnpm exec vitest run",
+    "pnpm install",
+    "npm run typecheck",
+    "npm install",
     "python3 -c 'import urllib.request'",
     "python script.py",
     "node -e 'fetch(1)'",
@@ -77,26 +123,48 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
     "cat <(ls)",
     "cat <<EOF\nx\nEOF",
     "{ ls; }",
-    // write or read outside the working directory
-    "echo x > /etc/passwd",
-    "echo x >> ../../.bashrc",
-    "echo x > ~/file",
+    // reading what an agent must not see, or leaving the working directory
+    "cat /etc/hosts",
+    "cat ~/.exo-agent-stack/dashboard-token",
+    "cat ../secrets",
+    "cat ../../.ssh/id_rsa",
+    "ls /",
+    "ls ~",
+    "head -n 5 /etc/passwd",
+    "grep -r token /",
+    "grep -f /etc/passwd x",
+    "find / -name x",
+    "diff /etc/passwd x",
     "cat < /etc/passwd",
+    "echo x > /etc/passwd",
     "ls > $OUT",
-    // restricted programs with the wrong arguments
-    "sort -o /etc/cron.d/x a.txt",
-    "sort --output=../x a.txt",
-    "uniq a.txt /etc/x",
+    "cd /",
+    "cd ..",
+    "cd",
+    // flags that write, execute or read elsewhere
+    "sort -o out.txt a.txt",
+    "sort -ofoo a.txt",
+    "sort -nro out a.txt",
+    "sort --output=out a.txt",
+    "sort --compress-program=sh a.txt",
+    "sort --files0-from=list a.txt",
+    "sort -T /tmp a.txt",
+    "uniq a.txt out.txt",
     "find . -exec rm {} +",
     "find . -delete",
-    "rg --pre 'sh' x",
-    "make up",
-    "make -f evil.mk check-fast",
-    "pnpm install",
-    "pnpm dlx x",
-    "pnpm exec tsx x.ts",
-    "npm install",
-    "npm run deploy",
+    "find . -fprint out",
+    "find . -newer /etc/passwd",
+    "rg --pre sh x",
+    "rg -z x",
+    "rg --no-config x",
+    "grep --exclude-from=/etc/passwd x",
+    "git log --output=Makefile",
+    "git diff --output=Makefile",
+    "git diff --ext-diff",
+    "git diff --textconv",
+    "git diff --no-index /etc/passwd x",
+    "git show --open-files-in-pager=sh",
+    "git log -O/etc/passwd",
     "git remote add x y",
     "git fetch",
     "git pull",
@@ -104,6 +172,10 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
     "git config user.name x",
     "git submodule update",
     "git rebase -i HEAD~2",
+    "git ls-files /etc",
+    "git log /etc/passwd",
+    "head -n abc a.txt",
+    "tail -f build.log",
     // unparseable or odd
     "",
     "   ",
@@ -120,9 +192,10 @@ describe("isProvablySafeBash: everything else is for the dashboard", () => {
   });
 
   it("is not fooled by letter case in the program or the sub-command", () => {
-    expect(safe("GIT status")).toBe(false); // an unknown program: not provably safe
+    expect(safe("GIT status")).toBe(false);
     expect(safe("git PUSH")).toBe(false);
     expect(safe("NPM publish")).toBe(false);
+    expect(safe("LS")).toBe(false);
   });
 
   it("refuses a very long command rather than parse it", () => {

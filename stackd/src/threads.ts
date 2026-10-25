@@ -114,19 +114,23 @@ export async function threadStatus(
     : true;
 
   let active: string | null = null;
-  if (startedTurn && !ended && (await ctx.exo.getTurn(agent.id, thread.id, startedTurn)).active) {
-    active = startedTurn;
+  let cutOff: string | null = null;
+  if (startedTurn && !ended) {
+    if ((await ctx.exo.getTurn(agent.id, thread.id, startedTurn)).active) active = startedTurn;
+    else cutOff = startedTurn; // not active, and it never ended: the supervisor's to continue
   }
   const open = active
     ? openRequests(events.filter((e) => field(e, "turn_id") === active))
     : { approvals: [], inputs: [] };
-  const state: ThreadState = !active
-    ? "idle"
-    : open.approvals.length > 0
-      ? "awaiting_approval"
-      : open.inputs.length > 0
-        ? "awaiting_input"
-        : "running";
+  const state: ThreadState = cutOff
+    ? ctx.supervisor.recoveryOutcome(cutOff)
+    : !active
+      ? "idle"
+      : open.approvals.length > 0
+        ? "awaiting_approval"
+        : open.inputs.length > 0
+          ? "awaiting_input"
+          : "running";
 
   const cost = ctx.db
     .prepare("SELECT COALESCE(SUM(cost_micros), 0) AS micros FROM usage_events WHERE thread_id = ?")

@@ -27,7 +27,7 @@ export interface TurnRow {
   thread_id: string;
   session_id: string;
   input: string;
-  status: "running" | "completed" | "canceled" | "failed";
+  status: "running" | "completed" | "canceled" | "failed" | "interrupted";
   frontend_tools: unknown[];
   auto_approve_tools: string[];
 }

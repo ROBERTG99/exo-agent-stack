@@ -3,6 +3,7 @@ import type { ExoClient } from "@exos/exo-client";
 import type { AgentDirectory, AgentInfo } from "./agents.ts";
 import type { CreditGuard } from "./credit.ts";
 import type { Meter } from "./meter.ts";
+import type { Supervisor } from "./supervisor.ts";
 import type { Db } from "./db/index.ts";
 import type { Idempotency } from "./idempotency.ts";
 import type { WorktreeManager } from "./worktrees.ts";
@@ -25,6 +26,7 @@ export interface AppContext {
   credit: CreditGuard;
   meter: Meter;
   agents: AgentDirectory;
+  supervisor: Supervisor;
   clock: () => Date;
   /** Where the dashboard lives, for links in responses. */
   dashboardUrl: string;
