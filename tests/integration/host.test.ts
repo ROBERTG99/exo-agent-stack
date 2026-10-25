@@ -1,7 +1,16 @@
 // T-33: `exos host up|down|status` start real processes: the offline Exo simulator, the fake model,
 // stackd and the bridge, on random loopback ports.
+import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:net";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -167,6 +176,33 @@ describe("exos host up, status and down", () => {
     expect(s.err.join("\n")).toMatch(/did not become healthy/);
     expect((await hostStatus(bad)).every((r) => !r.running)).toBe(true);
   }, 60_000);
+
+  it("never signals a process that only happens to have a recorded pid and is also node", async () => {
+    const cfg = await config();
+    // a bystander: another node process, as an IDE server or a dev server would be after a reboot
+    const decoy = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+    cleanups.push(() => void decoy.kill("SIGKILL"));
+    mkdirSync(join(cfg.stateDir, "run"), { recursive: true });
+    const record = (args?: string[]) =>
+      writeFileSync(
+        join(cfg.stateDir, "run", "stackd.pid"),
+        JSON.stringify({
+          pid: decoy.pid,
+          started_at: new Date().toISOString(),
+          command: process.execPath,
+          ...(args ? { args } : {}),
+        }),
+      );
+    for (const args of [undefined, ["--import", "tsx", join(cfg.repo, "stackd/src/server.ts")]]) {
+      record(args);
+      expect((await hostStatus(cfg)).find((r) => r.name === "stackd")!.running).toBe(false);
+      const s = sink();
+      expect(await hostDown(cfg, s.io)).toBe(0);
+      expect(alive(decoy.pid!)).toBe(true);
+    }
+  }, 30_000);
 
   it("says so when nothing is running", async () => {
     const cfg = await config();

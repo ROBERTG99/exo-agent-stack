@@ -164,6 +164,8 @@ interface PidRecord {
   pid: number;
   started_at: string;
   command: string;
+  /** What the service was started with; a record without it cannot be matched and is not trusted. */
+  args?: string[];
 }
 
 function readPid(cfg: HostConfig, name: string): PidRecord | undefined {
@@ -183,16 +185,20 @@ function alive(pid: number): boolean {
   }
 }
 
-/** True if `pid` is running the command we recorded, so a reused pid is not mistaken for ours. */
+/**
+ * True only if `pid` is running the command line we recorded: the program and every argument (so the
+ * script of the service, not just any node process). A pid that was reused after a reboot, a record
+ * without arguments or a `ps` that fails are not ours: `down` signals nothing it cannot identify.
+ */
 function isOurs(rec: PidRecord): boolean {
-  if (!alive(rec.pid)) return false;
+  if (!alive(rec.pid) || !Array.isArray(rec.args)) return false;
   try {
-    const cmd = execFileSync("ps", ["-o", "command=", "-p", String(rec.pid)], {
+    const cmd = execFileSync("ps", ["-ww", "-o", "command=", "-p", String(rec.pid)], {
       encoding: "utf8",
     }).trim();
-    return cmd.includes(path.basename(rec.command)) || cmd.includes("node");
+    return cmd.includes(path.basename(rec.command)) && rec.args.every((a) => cmd.includes(a));
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -275,6 +281,7 @@ export async function hostUp(
         pid: child.pid,
         started_at: new Date().toISOString(),
         command: def.command,
+        args: def.args,
       } satisfies PidRecord),
       { mode: 0o600 },
     );

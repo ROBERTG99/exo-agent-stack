@@ -267,3 +267,9 @@ Append-only log. Format: date, decision, alternatives, reason. Architectural cho
 - **Why:** the review forked a finished thread and the total doubled (78000 against 39000 micro-dollars in the new test), which can push a pool to `stop` early. A turn runs once, so counting by turn and position is the invariant that holds whatever ids a fork assigns.
 - **Evidence:** `tests/integration/credit.test.ts` (fork before and after the first pass, and a new turn on the fork still counts) and `tests/unit/credit/meter.test.ts`.
 - **Limit:** real Exo's fork copy is unverified (V-4); the rule assumes a copied event keeps its `turn_id`. If Exo gave copies new turn ids, they would be counted again, and the maintainer's re-recording of `thread_forked` (see docs/KNOWN_LIMITATIONS.md) will show it. Databases created before this migration have no ordinals for earlier rows, so forks of turns metered before it can still double count.
+
+## 2026-10-25 · `exos host down` signals only a process it can identify (M3 review)
+
+- **Decision:** the pid record keeps the arguments a service was started with, and a pid counts as ours only if `ps -ww` shows the program and every recorded argument (the service's script). A record without arguments, a dead pid or a failing `ps` is not ours: `down` removes the stale record and signals nothing; `up` starts the service again.
+- **Why:** the old check accepted any command line containing "node", and returned true when `ps` failed, so after a reboot a stale pid file could point `down` at an IDE or dev server (reproduced with a decoy node process).
+- **Evidence:** `tests/integration/host.test.ts` ("never signals a process that only happens to have a recorded pid and is also node").
