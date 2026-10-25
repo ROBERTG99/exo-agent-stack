@@ -42,8 +42,8 @@ down: ## Stop the stack
 	$(COMPOSE) down --remove-orphans
 
 .PHONY: seed
-seed: ## Load the synthetic dataset with a fixed seed
-	$(call NOT_YET,T-15)
+seed: ## Write the synthetic datasets and fixtures (seed 20261022, gen.v1)
+	$(PNPM) exec tsx data/generator/src/cli.ts
 
 .PHONY: demo
 demo: ## Run the scripted demo scenario against the running stack, offline

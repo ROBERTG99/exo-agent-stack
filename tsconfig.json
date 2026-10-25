@@ -18,5 +18,14 @@
     "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/dist", "vendor", "coverage", ".exos-state", "docs/images"]
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "vendor",
+    "coverage",
+    ".exos-state",
+    "docs/images",
+    "fixtures/review-target",
+    "fixtures/build-templates"
+  ]
 }

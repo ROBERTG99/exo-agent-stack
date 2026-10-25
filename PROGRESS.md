@@ -52,7 +52,7 @@ Status: `todo`, `doing`, `done`, `blocked`. Evidence is the command and a one-li
 | T-12 | Environments [FR-3] | M1 | todo | |
 | T-13 | Agents sync [FR-2] | M1 | todo | |
 | T-14 | stackd store and audit | M1 | done | `make test`: 456 unit/harness + 24 integration passed; tests/unit/db (migrate: ordering, idempotency, checksum, rollback, gap/duplicate, every §4.4 constraint; audit-chain: genesis, linking, canonical hash, edited field/details, deleted event, forged link, truncation with checkpoint, two connections, rollback) and tests/unit/cli/audit-verify.test.ts run the real `exos audit verify` (exit 0 intact, 1 tampered, 2 no database); `make typecheck` clean |
-| T-15 | Synthetic generator | M1 | todo | |
+| T-15 | Synthetic generator | M1 | done | `make seed` writes 18 files (5 suites x dev/test, manifest, fixtures); second run byte-identical (sha256 of all .jsonl compared) and `data/generator/src/cli.ts --check` ok; `pnpm exec vitest run --project unit tests/unit/generator.test.ts`: 36 passed (sizes 30/20/35/24/10 with the §11 splits, 25 misconfigurations over 17 checks + 10 clean stacks validated against StackSnapshot, credit gold labels equal an independent BigInt oracle incl. exact 70%/95% thresholds, no clock/unseeded randomness); `make check-fast`: 526 passed; typecheck clean |
 | T-16 | Fake model [FR-10] | M2 | todo | |
 | T-17 | Scripted harness [FR-10] | M2 | todo | |
 | T-18 | Custom tools [FR-7] | M2 | todo | |

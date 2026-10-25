@@ -13,3 +13,6 @@ evals/reports
 dashboard/src/api/schema.d.ts
 playwright-report
 test-results
+evals/datasets
+fixtures/review-target
+fixtures/build-templates

@@ -16,6 +16,7 @@
     "START.md",
     "docs/specs/**",
     ".claude/rules/subagents.md",
+    "fixtures/**",
     ".exos-state/**",
     "**/node_modules/**",
     "evals/reports/**",
