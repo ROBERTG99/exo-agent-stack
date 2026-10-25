@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@exos/common": "workspace:*",
-    "@exos/stackd": "workspace:*"
+    "@exos/stackd": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

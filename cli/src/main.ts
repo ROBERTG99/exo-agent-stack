@@ -2,6 +2,7 @@
 // `exos`: the stack's command line. Commands are added per task (audit verify in T-14).
 import { fileURLToPath } from "node:url";
 import { auditCommand } from "./commands/audit.ts";
+import { dualReviewCommand } from "./commands/dual-review.ts";
 
 export interface CommandIo {
   env: Record<string, string | undefined>;
@@ -13,6 +14,7 @@ type Command = (args: string[], io: CommandIo) => number | Promise<number>;
 
 export const commands: Record<string, Command> = {
   audit: auditCommand,
+  "dual-review": dualReviewCommand,
 };
 
 export async function run(argv: string[], io: CommandIo): Promise<number> {
