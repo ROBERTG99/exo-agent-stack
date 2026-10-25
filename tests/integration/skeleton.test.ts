@@ -1,3 +1,5 @@
+import { connect, createServer as createTcpServer } from "node:net";
+import { networkInterfaces } from "node:os";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
@@ -5,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { buildFakeModel } from "@exos/fake-model/server";
-import { buildStackd } from "@exos/stackd/server";
+import { buildFakeModel, main as mainFakeModel } from "@exos/fake-model/server";
+import { buildStackd, main as mainStackd } from "@exos/stackd/server";
 
 const root = join(import.meta.dirname, "..", "..");
 
@@ -142,7 +144,7 @@ describe("stackd skeleton", () => {
     expect(exo.seen).toContain("GET /exo/agent");
   });
 
-  it("returns 502 problem+json when Exo is down", async () => {
+  it("returns 503 problem+json when Exo is down", async () => {
     const { base, token } = await start();
     exo.close();
     const res = await fetch(`${base}/api/v1/agents`, {
@@ -171,6 +173,36 @@ describe("stackd skeleton", () => {
     expect(status).toBe(403);
   });
 
+  it("rejects a Host header without a port and a Host with the wrong port", async () => {
+    const { port } = await start();
+    const { request } = await import("node:http");
+    const status = (host: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(
+          { host: "127.0.0.1", port, path: "/api/v1/health", headers: { host } },
+          (res) => resolve(res.statusCode ?? 0),
+        );
+        req.on("error", reject);
+        req.end();
+      });
+    expect(await status("127.0.0.1")).toBe(403);
+    expect(await status("127.0.0.1:1")).toBe(403);
+    expect(await status(`localhost:${port}`)).toBe(200);
+  });
+
+  it("uses publicPort when it differs from the socket port, and rejects Origin: null", async () => {
+    const stackd = await buildStackd({ stateDir, exoUrl: exo.url, publicPort: 9812 });
+    apps.push(stackd.app);
+    await stackd.app.listen({ host: "127.0.0.1", port: 0 });
+    const port = (stackd.app.server.address() as AddressInfo).port;
+    // The browser-visible port is 9812, so a Host naming the real socket port is refused.
+    expect((await fetch(`http://127.0.0.1:${port}/api/v1/health`)).status).toBe(403);
+
+    const other = await start();
+    const nullOrigin = await fetch(`${other.base}/api/v1/health`, { headers: { origin: "null" } });
+    expect(nullOrigin.status).toBe(403);
+  });
+
   it("accepts localhost:<port> as Host", async () => {
     const { port } = await start();
     const res = await fetch(`http://localhost:${port}/api/v1/health`);
@@ -188,6 +220,87 @@ describe("stackd skeleton", () => {
     });
     expect(dash.status).toBe(200);
   });
+});
+
+async function freePort(): Promise<number> {
+  const s = createTcpServer();
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+  const port = (s.address() as AddressInfo).port;
+  await new Promise<void>((r) => s.close(() => r()));
+  return port;
+}
+
+function canConnect(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = connect({ host, port, timeout: 1500 });
+    sock.once("connect", () => {
+      sock.destroy();
+      resolve(true);
+    });
+    sock.once("timeout", () => {
+      sock.destroy();
+      resolve(false);
+    });
+    sock.once("error", () => resolve(false));
+  });
+}
+
+const lanAddress = Object.values(networkInterfaces())
+  .flat()
+  .find((i) => i && i.family === "IPv4" && !i.internal)?.address;
+
+describe("service entrypoints honour the loopback-only rail", () => {
+  const apps: Array<{ close: () => Promise<unknown> }> = [];
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((a) => a.close()));
+  });
+
+  const stateDirEnv = () => mkdtempSync(join(tmpdir(), "ep-"));
+  const cases = [
+    {
+      name: "stackd",
+      start: (port: number) =>
+        mainStackd({
+          EXOS_STACKD_PORT: String(port),
+          EXOS_STATE_DIR: stateDirEnv(),
+          EXOS_EXO_URL: "http://127.0.0.1:1/exo",
+        }),
+      withHost: (host: string, port: number) =>
+        mainStackd({
+          EXOS_LISTEN_HOST: host,
+          EXOS_STACKD_PORT: String(port),
+          EXOS_STATE_DIR: stateDirEnv(),
+        }),
+    },
+    {
+      name: "fake-model",
+      start: (port: number) => mainFakeModel({ EXOS_FAKE_MODEL_PORT: String(port) }),
+      withHost: (host: string, port: number) =>
+        mainFakeModel({ EXOS_LISTEN_HOST: host, EXOS_FAKE_MODEL_PORT: String(port) }),
+    },
+  ];
+
+  it.each(cases)(
+    "$name main() listens on 127.0.0.1 and is unreachable on the LAN address",
+    async (c) => {
+      const port = await freePort();
+      const app = await c.start(port);
+      apps.push(app);
+      expect((app.server.address() as AddressInfo).address).toBe("127.0.0.1");
+      expect(await canConnect("127.0.0.1", port)).toBe(true);
+      if (lanAddress) expect(await canConnect(lanAddress, port)).toBe(false);
+    },
+  );
+
+  it.each(cases)(
+    "$name main() refuses a non-loopback EXOS_LISTEN_HOST before listening",
+    async (c) => {
+      const port = await freePort();
+      await expect(c.withHost("0.0.0.0", port)).rejects.toThrow(/loopback/i);
+      await expect(c.withHost("container", port)).rejects.toThrow(/container/i);
+      expect(await canConnect("127.0.0.1", port)).toBe(false);
+    },
+  );
 });
 
 describe("skeleton deployment files", () => {

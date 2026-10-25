@@ -6,7 +6,7 @@ Single source of progress for the build described in `BUILD.md` (copy: `docs/spe
 
 Nothing here is done by the build agent (BUILD.md §0.1, §1.5). Items are added as the build discovers them.
 
-- [ ] **Confirm the Exo repository URL for `vendor/exo` (blocks T-02, T-09 and everything verified against the pin).** BUILD.md pins commit `f9f012730fd3bf7e061e3e947e01bd6c2bb415e9` but never gives the URL. The build found `https://github.com/exoharness/exo` by web search (public, Rust, MIT, `git ls-remote` works) and tried `git submodule add`, which the permission classifier denied as untrusted code integration. Either allow it (add a `Bash(git submodule add:*)` permission rule or say "yes, use exoharness/exo") or give the correct URL. The unmodified test is saved as `exo-pin.test.ts` for T-02.
+- [ ] **Confirm the Exo repository URL for `vendor/exo` (blocks T-02, T-09 and everything verified against the pin).** BUILD.md pins commit `f9f012730fd3bf7e061e3e947e01bd6c2bb415e9` but never gives the URL. The build found `https://github.com/exoharness/exo` by web search (public, Rust, MIT, `git ls-remote` works) and tried `git submodule add`, which the permission classifier denied as untrusted code integration. Either allow it (add a `Bash(git submodule add:*)` permission rule or say "yes, use exoharness/exo") or give the correct URL. The test written first for T-02 is kept at `tests/pending/exo-pin.test.ts` (outside every Vitest project so it cannot turn the build red); move it to `tests/harness/` once the submodule is added.
 - [ ] Sign in to Claude Code on this Mac (Mode A login).
 - [ ] Run `claude setup-token`, then `scripts/mode-b-store-token.sh` (Mode B; the script stores the token in vault `personal` as `claude-oauth`).
 - [ ] Create a Cursor user key and run `scripts/store-cursor-key.sh`.
@@ -120,3 +120,5 @@ Every `opus` and `fable` delegation is logged here (BUILD.md, Model routing). Ma
 
 | Date | Task | Role | Model | Effort | Reason | Outcome |
 |---|---|---|---|---|---|---|
+| 2026-10-25 | M0 milestone | reviewer (general-purpose with `.claude/agents/reviewer.md`; the named agent is not loaded until the next session) | opus | high | milestone review (BUILD.md §0.9) | VERDICT fix first: 4 blockers (sign-in evasion via wrappers, env-var bind, undocumented rail 3 deviation, doc mismatches) fixed in the follow-up commits; notes handled or recorded |
+| 2026-10-25 | M0 milestone | policy-guardian (general-purpose with `.claude/agents/policy-guardian.md`) | opus | high | milestone rail check | DECISION allow; 4 forward-looking notes (live-guard exit 2 in T-44, loopback test in T-47, unpinned `go install`, `.git/config` mtime) |

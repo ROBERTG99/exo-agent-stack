@@ -1,8 +1,12 @@
 // Loopback-only rail (BUILD.md §0.1 rail 3): every listener binds 127.0.0.1.
 // The single exception is a service inside a container, which must listen on the container's
-// own interfaces for Docker's port mapping to reach it. That is only allowed when
-// EXOS_LISTEN_HOST=container AND EXOS_IN_CONTAINER=1, and compose.yaml publishes those ports as
-// 127.0.0.1:<port> only (checked by tests/integration/skeleton.test.ts and loopback.test.ts).
+// own interfaces for Docker's port mapping to reach it (docs/adr/0009-container-listen-address.md).
+// It needs three things at once: EXOS_LISTEN_HOST=container, EXOS_IN_CONTAINER=1 and real container
+// evidence (/.dockerenv or /run/.containerenv). compose.yaml publishes those ports as
+// 127.0.0.1:<port> only; tests/integration/skeleton.test.ts checks that now and
+// tests/integration/loopback.test.ts (T-47) checks the running stack.
+
+import { existsSync } from "node:fs";
 
 export class ListenHostError extends Error {
   readonly code = "non_loopback_bind";
@@ -15,15 +19,23 @@ const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
 // the port is published without the 127.0.0.1 prefix, which the compose tests forbid.
 const ALL_INTERFACES_IN_CONTAINER = "0.0.0.0";
 
-export function resolveListenHost(env: Env = process.env): string {
+/** Docker creates /.dockerenv and Podman /run/.containerenv inside every container. */
+export function runningInContainer(): boolean {
+  return existsSync("/.dockerenv") || existsSync("/run/.containerenv");
+}
+
+export function resolveListenHost(
+  env: Env = process.env,
+  inContainer: () => boolean = runningInContainer,
+): string {
   const raw = (env.EXOS_LISTEN_HOST ?? "").trim();
   if (raw === "") return "127.0.0.1";
   if (raw === "localhost") return "127.0.0.1";
   if (LOOPBACK.has(raw)) return raw;
   if (raw === "container") {
-    if (env.EXOS_IN_CONTAINER !== "1") {
+    if (env.EXOS_IN_CONTAINER !== "1" || !inContainer()) {
       throw new ListenHostError(
-        "EXOS_LISTEN_HOST=container is only allowed inside a container (EXOS_IN_CONTAINER=1)",
+        "EXOS_LISTEN_HOST=container is only allowed inside a container (EXOS_IN_CONTAINER=1 and a container filesystem)",
       );
     }
     return ALL_INTERFACES_IN_CONTAINER;

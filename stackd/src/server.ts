@@ -110,7 +110,7 @@ export async function buildStackd(
   return { app, token };
 }
 
-export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function main(env: NodeJS.ProcessEnv = process.env): Promise<FastifyInstance> {
   const host = resolveListenHost(env);
   const port = parsePort(env.EXOS_STACKD_PORT, 9812);
   const exoPort = parsePort(env.EXOS_EXO_PORT, 9810);
@@ -122,6 +122,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   });
   await app.listen({ host, port });
   console.log(JSON.stringify({ level: "info", service: "stackd", listening: `${host}:${port}` }));
+  return app;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

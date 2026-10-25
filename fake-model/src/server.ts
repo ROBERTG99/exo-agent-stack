@@ -17,7 +17,7 @@ export async function buildFakeModel(): Promise<FastifyInstance> {
   return app;
 }
 
-export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function main(env: NodeJS.ProcessEnv = process.env): Promise<FastifyInstance> {
   const host = resolveListenHost(env);
   const port = parsePort(env.EXOS_FAKE_MODEL_PORT, 9840);
   const app = await buildFakeModel();
@@ -25,6 +25,7 @@ export async function main(env: NodeJS.ProcessEnv = process.env): Promise<void> 
   console.log(
     JSON.stringify({ level: "info", service: "fake-model", listening: `${host}:${port}` }),
   );
+  return app;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

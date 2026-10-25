@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ListenHostError, parsePort, resolveListenHost } from "@exos/common";
+import { ListenHostError, parsePort, resolveListenHost, runningInContainer } from "@exos/common";
 
 describe("resolveListenHost (loopback-only rail)", () => {
   it("defaults to 127.0.0.1", () => {
@@ -26,14 +26,33 @@ describe("resolveListenHost (loopback-only rail)", () => {
     },
   );
 
-  it("allows 'container' only inside a container, where compose publishes 127.0.0.1 ports", () => {
-    expect(() => resolveListenHost({ EXOS_LISTEN_HOST: "container" })).toThrow(ListenHostError);
+  it("allows 'container' only inside a real container, where compose publishes 127.0.0.1 ports", () => {
+    const yes = () => true;
+    const no = () => false;
+    expect(() => resolveListenHost({ EXOS_LISTEN_HOST: "container" }, yes)).toThrow(
+      ListenHostError,
+    );
     expect(() =>
-      resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "0" }),
+      resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "0" }, yes),
     ).toThrow(ListenHostError);
-    expect(resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "1" })).toBe(
+    // The flag alone is not enough: a host process that sets it still has no container filesystem.
+    expect(() =>
+      resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "1" }, no),
+    ).toThrow(ListenHostError);
+    expect(resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "1" }, yes)).toBe(
       ["0", "0", "0", "0"].join("."),
     );
+  });
+
+  it("detects the real environment: this host test run is not inside a container", () => {
+    // Developer machines and CI runners that execute this suite natively have no /.dockerenv;
+    // the containerised test run (make test-docker) is the one place where this may differ.
+    expect(typeof runningInContainer()).toBe("boolean");
+    if (!runningInContainer()) {
+      expect(() =>
+        resolveListenHost({ EXOS_LISTEN_HOST: "container", EXOS_IN_CONTAINER: "1" }),
+      ).toThrow(ListenHostError);
+    }
   });
 });
 
